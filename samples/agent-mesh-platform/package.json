@@ -1,0 +1,14 @@
+{
+  "name": "orchestrator-agent-mesh-platform-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agent Mesh Platform — onboarding & catalog UI for the OrchestratorEngine.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

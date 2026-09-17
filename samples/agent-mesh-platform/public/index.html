@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Mesh Platform — Orchestrator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <!-- ============== Top bar ============== -->
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" width="24" height="24">
+                        <defs>
+                            <linearGradient id="ampg" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#4f6bed" />
+                                <stop offset="50%" stop-color="#9c6ade" />
+                                <stop offset="100%" stop-color="#e8578c" />
+                            </linearGradient>
+                        </defs>
+                        <path fill="url(#ampg)" d="M16 3.5c2.4 2.4 2.4 6.3 0 8.7l-3.8 3.8c-2.4 2.4-6.3 2.4-8.7 0-.9-.9 .5-2.4 1.4-1.5 1.6 1.6 4.1 1.6 5.7 0l3.8-3.8c1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.6-1.5zM28.5 15.8c2.4 2.4 2.4 6.3 0 8.7-2.4 2.4-6.3 2.4-8.7 0l-3.8-3.8c-2.4-2.4-2.4-6.3 0-8.7 .9-.9 2.4 .6 1.5 1.5-1.6 1.6-1.6 4.1 0 5.7l3.8 3.8c1.6 1.6 4.1 1.6 5.7 0 1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.5-1.5z" />
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <div class="brand-title">Agent Mesh Platform</div>
+                    <div class="brand-sub">Orchestrator onboarding &amp; catalog</div>
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="status-row" id="apiStatus" title="API health">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Checking API…</span>
+                </div>
+                <button class="ghost-btn" id="refreshBtn" type="button" title="Refresh agents">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    Refresh
+                </button>
+                <button class="primary-btn" id="onboardBtn" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Onboard Agent
+                </button>
+            </div>
+        </header>
+
+        <!-- ============== Hero ============== -->
+        <section class="hero">
+            <div class="hero-inner">
+                <h1>Bring any specialist agent into the mesh.</h1>
+                <p>Register a Foundry agent with the Orchestrator, wire up its MCP endpoints, and it becomes routable to Copilot users within seconds. Explore the current catalog below.</p>
+                <div class="hero-stats" id="heroStats">
+                    <div class="stat">
+                        <div class="stat-value" id="statAgents">–</div>
+                        <div class="stat-label">Agents in mesh</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="statCategories">–</div>
+                        <div class="stat-label">Categories</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="statSurfaces">–</div>
+                        <div class="stat-label">Foundry surfaces</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============== Catalog ============== -->
+        <main class="catalog">
+            <div class="catalog-header">
+                <h2>Agent catalog</h2>
+                <div class="catalog-tools">
+                    <div class="search-box">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="text" id="searchInput" placeholder="Search by name, tag, or capability…" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="catalog-body" id="catalogBody">
+                <!-- Loading skeleton -->
+                <div class="empty-state" id="loadingState">
+                    <div class="spinner"></div>
+                    <p>Fetching agents from Foundry…</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- ============== Onboard modal ============== -->
+        <div class="modal-backdrop" id="onboardModal" hidden>
+            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="onboardTitle">
+                <header class="modal-head">
+                    <div>
+                        <h3 id="onboardTitle">Onboard a new agent</h3>
+                        <p class="modal-sub">Fill in the details the Orchestrator's <code>/onboard</code> API needs. The agent will be created on Foundry and made discoverable immediately.</p>
+                    </div>
+                    <button class="icon-btn" data-close-modal="onboardModal" aria-label="Close">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                </header>
+
+                <form id="onboardForm" class="modal-body form-grid" autocomplete="off">
+                    <div class="field field-span-2">
+                        <label for="fName">Name <span class="req">*</span></label>
+                        <input type="text" id="fName" required placeholder="Contoso Laptops Concierge" />
+                    </div>
+
+                    <div class="field field-span-2">
+                        <label for="fDescription">Description <span class="req">*</span></label>
+                        <textarea id="fDescription" rows="2" required placeholder="Recommends and configures Contoso laptop bundles across gaming, business, and student SKUs."></textarea>
+                    </div>
+
+                    <div class="field">
+                        <label for="fModel">Model <span class="req">*</span></label>
+                        <input type="text" id="fModel" required value="gpt-4o-mini" />
+                        <small>Foundry deployment name.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="fAuthority">Authority</label>
+                        <input type="text" id="fAuthority" placeholder="https://login.microsoftonline.com/<tenant>" />
+                        <small>OIDC issuer the MCP server trusts.</small>
+                    </div>
+
+                    <div class="field field-span-2">
+                        <label for="fInstructions">Instructions <span class="hint">(optional — a default is synthesized)</span></label>
+                        <textarea id="fInstructions" rows="4" placeholder="You are ..."></textarea>
+                    </div>
+
+                    <div class="field">
+                        <label for="fTags">Tags <span class="hint">(comma-separated)</span></label>
+                        <input type="text" id="fTags" placeholder="laptops, gaming, contoso" />
+                        <small>First tag drives the catalog category.</small>
+                    </div>
+
+                    <div class="field">
+                        <label for="fCapabilities">Capabilities <span class="hint">(comma-separated)</span></label>
+                        <input type="text" id="fCapabilities" placeholder="product-search, checkout" />
+                    </div>
+
+                    <div class="field field-span-2 divider">
+                        <span>MCP endpoints</span>
+                    </div>
+
+                    <div class="field field-span-2">
+                        <label for="fMcpUrl">Default MCP server URL</label>
+                        <input type="url" id="fMcpUrl" placeholder="https://mcp.contoso.com" />
+                    </div>
+
+                    <div class="field">
+                        <label for="fMcpLabel">MCP server label</label>
+                        <input type="text" id="fMcpLabel" placeholder="contoso-laptops" />
+                    </div>
+
+                    <div class="field">
+                        <label for="fMcpDiscovery">Discovery MCP URL</label>
+                        <input type="url" id="fMcpDiscovery" placeholder="https://mcp.contoso.com/discover" />
+                    </div>
+
+                    <div class="field">
+                        <label for="fMcpExecution">Execution MCP URL</label>
+                        <input type="url" id="fMcpExecution" placeholder="https://mcp.contoso.com/execute" />
+                    </div>
+
+                    <div class="field">
+                        <label for="fMcpConfirmation">Confirmation MCP URL</label>
+                        <input type="url" id="fMcpConfirmation" placeholder="https://mcp.contoso.com/confirm" />
+                    </div>
+
+                    <div class="field field-span-2 form-actions">
+                        <button type="button" class="ghost-btn" data-close-modal="onboardModal">Cancel</button>
+                        <button type="submit" class="primary-btn" id="submitOnboardBtn">
+                            <span class="btn-label">Onboard agent</span>
+                            <span class="btn-spinner" hidden></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ============== Agent config modal ============== -->
+        <div class="modal-backdrop" id="detailModal" hidden>
+            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+                <header class="modal-head">
+                    <div class="detail-head-info">
+                        <div class="agent-avatar" id="detailAvatar">A</div>
+                        <div>
+                            <h3 id="detailTitle">Agent</h3>
+                            <p class="modal-sub" id="detailSubtitle">agent id</p>
+                        </div>
+                    </div>
+                    <button class="icon-btn" data-close-modal="detailModal" aria-label="Close">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                </header>
+                <div class="modal-body" id="detailBody">
+                    <!-- populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Toasts -->
+        <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
