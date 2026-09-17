@@ -585,6 +585,7 @@ MSYS_NO_PATHCONV=1 az container create \
     VectorStorage__IndexName="user-context" \
     Embedding__Endpoint="$OPENAI_ENDPOINT" \
     Embedding__DeploymentName="text-embedding-ada-002" \
+    APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=$APPINSIGHTS_KEY" \
   --memory 3 \
   --cpu 1 \
   --dns-name-label orchestrator-engine
