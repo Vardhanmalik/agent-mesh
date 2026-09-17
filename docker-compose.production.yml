@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  orchestrator-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orchestrator-engine-prod
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_HTTP_PORTS=8080
+      - ASPNETCORE_HTTPS_PORTS=8081
+      - ASPNETCORE_URLS=http://+:8080;https://+:8081
+      
+      # Azure Foundry Configuration
+      - AzureFoundry__Endpoint=${AzureFoundry__Endpoint}
+      - AzureFoundry__ProjectName=${AzureFoundry__ProjectName}
+      - AzureFoundry__SubscriptionId=${AzureFoundry__SubscriptionId}
+      - AzureFoundry__ResourceGroup=${AzureFoundry__ResourceGroup}
+      - AzureFoundry__SelectorAgentId=${AzureFoundry__SelectorAgentId:-}
+      
+      # Vector Storage (Azure AI Search)
+      - VectorStorage__Endpoint=${VectorStorage__Endpoint}
+      - VectorStorage__IndexName=user-context
+      - VectorStorage__EmbeddingDimensions=1536
+      
+      # Embedding Generation (Azure OpenAI)
+      - Embedding__DeploymentName=text-embedding-ada-002
+      - Embedding__Endpoint=${Embedding__Endpoint}
+      
+      # Monitoring
+      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
+      
+      # Logging
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__Microsoft.AspNetCore=Warning
+      - Logging__LogLevel__Microsoft.Extensions.Http=Warning
+    
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Network configuration
+networks:
+  default:
+    name: orchestrator-network
+    driver: bridge

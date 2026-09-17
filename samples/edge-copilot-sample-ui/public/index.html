@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edge · Copilot Extension — Sample</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <!-- ============================================================
+         Edge browser chrome (mocked)
+         ============================================================ -->
+    <div class="edge-shell" id="edgeShell">
+        <!-- Title bar with fake OS window controls + tabs -->
+        <div class="titlebar">
+            <div class="tabs" id="tabs">
+                <!-- tabs get rendered by app.js -->
+            </div>
+            <button class="tab-new" id="tabNewBtn" title="New tab">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="titlebar-spacer"></div>
+            <div class="win-controls" aria-hidden="true">
+                <span class="wc min"></span>
+                <span class="wc max"></span>
+                <span class="wc close"></span>
+            </div>
+        </div>
+
+        <!-- Toolbar: back / fwd / refresh / address bar / extension buttons -->
+        <div class="toolbar">
+            <button class="tb-icon" title="Back" disabled>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button class="tb-icon" title="Forward" disabled>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="tb-icon" id="reloadBtn" title="Reload">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15A9 9 0 1 1 18 6.34"/></svg>
+            </button>
+
+            <form class="omnibox" id="omniboxForm" autocomplete="off">
+                <span class="omni-lock" title="Site secured">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <input type="text" id="omniboxInput" class="omni-input" spellcheck="false"
+                       placeholder="Search or enter web address" />
+                <button type="button" class="omni-preset" id="presetsBtn" title="Load a preset site">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+            </form>
+
+            <div class="ext-tray">
+                <button class="tb-icon" title="Favorites">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 8.5 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 9 8.5 12 2"/></svg>
+                </button>
+
+                <!-- The Copilot extension button — this is the star of the show. -->
+                <button class="ext-copilot" id="copilotExtBtn" title="Ask Copilot about this page">
+                    <span class="ext-copilot-mark" aria-hidden="true">
+                        <svg viewBox="0 0 32 32" width="18" height="18">
+                            <defs>
+                                <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#4f6bed" />
+                                    <stop offset="50%" stop-color="#9c6ade" />
+                                    <stop offset="100%" stop-color="#e8578c" />
+                                </linearGradient>
+                            </defs>
+                            <path fill="url(#cg)" d="M16 3.5c2.4 2.4 2.4 6.3 0 8.7l-3.8 3.8c-2.4 2.4-6.3 2.4-8.7 0-.9-.9 .5-2.4 1.4-1.5 1.6 1.6 4.1 1.6 5.7 0l3.8-3.8c1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.6-1.5zM28.5 15.8c2.4 2.4 2.4 6.3 0 8.7-2.4 2.4-6.3 2.4-8.7 0l-3.8-3.8c-2.4-2.4-2.4-6.3 0-8.7 .9-.9 2.4 .6 1.5 1.5-1.6 1.6-1.6 4.1 0 5.7l3.8 3.8c1.6 1.6 4.1 1.6 5.7 0 1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.5-1.5z" />
+                        </svg>
+                    </span>
+                    <span class="ext-copilot-label">Copilot</span>
+                </button>
+
+                <button class="tb-icon" title="Settings and more">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Body: split into simulated web page + Copilot side panel -->
+        <div class="edge-body">
+            <main class="page" id="page">
+                <!-- Fake web page render for the active tab, populated by app.js -->
+            </main>
+
+            <aside class="copilot-panel" id="copilotPanel" hidden aria-label="Copilot side panel">
+                <header class="cp-header">
+                    <div class="cp-brand">
+                        <div class="cp-mark" aria-hidden="true">
+                            <svg viewBox="0 0 32 32" width="20" height="20">
+                                <path fill="url(#cg)" d="M16 3.5c2.4 2.4 2.4 6.3 0 8.7l-3.8 3.8c-2.4 2.4-6.3 2.4-8.7 0-.9-.9 .5-2.4 1.4-1.5 1.6 1.6 4.1 1.6 5.7 0l3.8-3.8c1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.6-1.5zM28.5 15.8c2.4 2.4 2.4 6.3 0 8.7-2.4 2.4-6.3 2.4-8.7 0l-3.8-3.8c-2.4-2.4-2.4-6.3 0-8.7 .9-.9 2.4 .6 1.5 1.5-1.6 1.6-1.6 4.1 0 5.7l3.8 3.8c1.6 1.6 4.1 1.6 5.7 0 1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.5-1.5z" />
+                            </svg>
+                        </div>
+                        <div class="cp-titles">
+                            <div class="cp-title">Copilot</div>
+                            <div class="cp-sub">Orchestrator extension</div>
+                        </div>
+                    </div>
+                    <div class="cp-header-right">
+                        <span class="cp-status" id="cpStatus" title="Orchestrator API health">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Checking…</span>
+                        </span>
+                        <button class="cp-close" id="cpCloseBtn" title="Close Copilot">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                        </button>
+                    </div>
+                </header>
+
+                <section class="cp-context" id="cpContext">
+                    <div class="cp-ctx-row">
+                        <div class="cp-ctx-icon" id="cpCtxIcon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+                        </div>
+                        <div class="cp-ctx-body">
+                            <div class="cp-ctx-host" id="cpCtxHost">—</div>
+                            <div class="cp-ctx-domain" id="cpCtxDomain">Click <strong>Copilot</strong> in the toolbar to analyze this page.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="cp-composer">
+                    <label class="cp-lbl" for="cpPromptInput">Ask for something on this site</label>
+                    <textarea id="cpPromptInput" rows="2"
+                              placeholder="e.g. buy me 3 pairs of running shoes under $100"></textarea>
+                    <div class="cp-composer-actions">
+                        <label class="cp-userid">
+                            <span>User</span>
+                            <input type="text" id="cpUserIdInput" value="demo-user" spellcheck="false" />
+                        </label>
+                        <button type="button" class="cp-run-btn" id="cpRunBtn">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                            Ask Copilot
+                        </button>
+                    </div>
+                </section>
+
+                <section class="cp-results" id="cpResults">
+                    <div class="cp-empty">
+                        <div class="cp-empty-mark" aria-hidden="true">
+                            <svg viewBox="0 0 64 64" width="48" height="48">
+                                <path fill="url(#cg)" d="M32 6c5 5 5 13 0 18l-8 8c-5 5-13 5-18 0-2-2 1-5 3-3 3 3 8 3 12 0l8-8c3-3 3-8 0-12-2-2 1-5 3-3zM58 32c5 5 5 13 0 18-5 5-13 5-18 0l-8-8c-5-5-5-13 0-18 2-2 5 1 3 3-3 3-3 8 0 12l8 8c3 3 8 3 12 0 3-3 3-8 0-12-2-2 1-5 3-3z" />
+                            </svg>
+                        </div>
+                        <h2>Copilot on any page</h2>
+                        <p>
+                            Open a site in the address bar above, then click the
+                            <strong>Copilot</strong> button in the toolbar. I'll read the URL,
+                            figure out what kind of site it is, and route to the right agent
+                            through the orchestrator's <code>/discover</code> API.
+                        </p>
+                        <ul class="cp-examples">
+                            <li><span class="cp-chip food">food delivery</span> doordash.com, ubereats.com, swiggy.com, zomato.com</li>
+                            <li><span class="cp-chip shop">shopping</span> amazon.com, walmart.com, target.com, myntra.com</li>
+                            <li><span class="cp-chip travel">travel</span> expedia.com, kayak.com, booking.com</li>
+                            <li><span class="cp-chip dine">dining</span> opentable.com, resy.com</li>
+                        </ul>
+                    </div>
+                </section>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Presets popover -->
+    <div class="preset-popover" id="presetPopover" hidden role="menu"></div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

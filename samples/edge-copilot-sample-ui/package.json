@@ -1,0 +1,14 @@
+{
+  "name": "orchestrator-edge-copilot-sample-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Edge browser + Copilot extension style sample UI for the OrchestratorEngine API (host-aware /discover trigger).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

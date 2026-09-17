@@ -1,0 +1,7 @@
+{
+    "option_id": "xyz",
+    "agent_name": "flight-agent",
+    "agent_type": "Travel",
+    "details": "Flight Id: 6E234. Flight date is 18th September. Flight time is 6 AM from Hyderabad. Total journey duration is 11 hrs. The window seat has extra price of 20$. There is no option of meal on flight.",
+    "price": "700$"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "orchestrator-copilot-sample-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "M365 Copilot-style sample UI for exercising the OrchestratorEngine API locally.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

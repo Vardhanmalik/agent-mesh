@@ -1,0 +1,14 @@
+Orchestrator Engine - Azure Setup Wrapper
+=========================================
+
+Script: C:\Users\vardhanmalik\Documents\OrchestratorEngine\azure-setup.sh
+
+Found Git Bash at: C:\Program Files\Git\bin\bash.exe
+Running setup script...
+
+
+=========================================
+Setup completed with exit code: 1
+
+Error log contents:
+[DEBUG] Getting subscription ID...

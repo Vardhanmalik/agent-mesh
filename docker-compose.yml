@@ -1,0 +1,23 @@
+services:
+  orchestrator-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+      - ASPNETCORE_HTTPS_PORTS=8081
+      - AzureFoundry__Endpoint=https://<your-foundry-project>.services.ai.azure.com/api/projects/<project-name>
+      - AzureFoundry__ProjectName=<your-project-name>
+      - AzureFoundry__SubscriptionId=<your-subscription-id>
+      - AzureFoundry__ResourceGroup=<your-resource-group>
+      - AzureFoundry__SelectorAgentId=<your-agent-selector-agent-id>
+      - VectorStorage__Endpoint=https://<your-search-service>.search.windows.net
+      - VectorStorage__IndexName=user-context
+      - VectorStorage__EmbeddingDimensions=1536
+      - Embedding__DeploymentName=text-embedding-ada-002
+      - Embedding__Endpoint=https://<your-openai-endpoint>.openai.azure.com/
+    restart: unless-stopped

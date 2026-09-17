@@ -1,0 +1,28 @@
+## Build outputs
+**/bin/
+**/obj/
+**/out/
+
+## .NET
+*.user
+*.suo
+*.cache
+*.vs/
+.dotnet/
+
+## IDE
+.vscode/
+.idea/
+*.swp
+
+## Docker
+docker-compose.override.yml
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Secrets — never commit
+appsettings.*.local.json
+*.pfx
+*.pem
