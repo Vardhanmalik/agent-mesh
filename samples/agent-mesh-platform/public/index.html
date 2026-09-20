@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent Mesh Platform — Orchestrator</title>
+    <title>Agent Store — Agent Mesh Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -11,24 +11,14 @@
 </head>
 <body>
     <div class="app-shell">
-        <!-- ============== Top bar ============== -->
+        <!-- ============== Top bar (minimal) ============== -->
         <header class="topbar">
-            <div class="brand">
+            <div class="brand" id="brandHome" role="button" tabindex="0">
                 <div class="brand-mark" aria-hidden="true">
-                    <svg viewBox="0 0 32 32" width="24" height="24">
-                        <defs>
-                            <linearGradient id="ampg" x1="0" y1="0" x2="1" y2="1">
-                                <stop offset="0%" stop-color="#4f6bed" />
-                                <stop offset="50%" stop-color="#9c6ade" />
-                                <stop offset="100%" stop-color="#e8578c" />
-                            </linearGradient>
-                        </defs>
-                        <path fill="url(#ampg)" d="M16 3.5c2.4 2.4 2.4 6.3 0 8.7l-3.8 3.8c-2.4 2.4-6.3 2.4-8.7 0-.9-.9 .5-2.4 1.4-1.5 1.6 1.6 4.1 1.6 5.7 0l3.8-3.8c1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.6-1.5zM28.5 15.8c2.4 2.4 2.4 6.3 0 8.7-2.4 2.4-6.3 2.4-8.7 0l-3.8-3.8c-2.4-2.4-2.4-6.3 0-8.7 .9-.9 2.4 .6 1.5 1.5-1.6 1.6-1.6 4.1 0 5.7l3.8 3.8c1.6 1.6 4.1 1.6 5.7 0 1.6-1.6 1.6-4.1 0-5.7-.9-.9 .6-2.4 1.5-1.5z" />
-                    </svg>
+                    <img src="/assets/brand/agent-mesh.svg" alt="Agent Mesh" width="22" height="22" />
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">Agent Mesh Platform</div>
-                    <div class="brand-sub">Orchestrator onboarding &amp; catalog</div>
                 </div>
             </div>
 
@@ -37,170 +27,254 @@
                     <span class="status-dot"></span>
                     <span class="status-text">Checking API…</span>
                 </div>
-                <button class="ghost-btn" id="refreshBtn" type="button" title="Refresh agents">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                    Refresh
-                </button>
-                <button class="primary-btn" id="onboardBtn" type="button">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    Onboard Agent
-                </button>
             </div>
         </header>
 
-        <!-- ============== Hero ============== -->
-        <section class="hero">
-            <div class="hero-inner">
-                <h1>Bring any specialist agent into the mesh.</h1>
-                <p>Register a Foundry agent with the Orchestrator, wire up its MCP endpoints, and it becomes routable to Copilot users within seconds. Explore the current catalog below.</p>
-                <div class="hero-stats" id="heroStats">
-                    <div class="stat">
-                        <div class="stat-value" id="statAgents">–</div>
-                        <div class="stat-label">Agents in mesh</div>
+        <!-- ============== Landing view (store) ============== -->
+        <main class="view store-view" id="storeView">
+            <div class="store-container">
+                <div class="store-head-row">
+                    <div>
+                        <div class="eyebrow">AGENT STORE</div>
+                        <h1 class="store-title">The right agent, the moment users need it</h1>
                     </div>
-                    <div class="stat">
-                        <div class="stat-value" id="statCategories">–</div>
-                        <div class="stat-label">Categories</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value" id="statSurfaces">–</div>
-                        <div class="stat-label">Foundry surfaces</div>
-                    </div>
+                    <button class="primary-btn" id="publishBtn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                        Publish an agent
+                    </button>
                 </div>
-            </div>
-        </section>
 
-        <!-- ============== Catalog ============== -->
-        <main class="catalog">
-            <div class="catalog-header">
-                <h2>Agent catalog</h2>
-                <div class="catalog-tools">
-                    <div class="search-box">
+                <!-- Hero banner -->
+                <section class="hero-banner">
+                    <div class="hero-copy">
+                        <div class="eyebrow subtle">ORCHESTRATED, NOT JUST PUBLISHED</div>
+                        <h2>Publish once. Get chosen everywhere.</h2>
+                        <p>Connect your agent once. Agent Mesh carries its identity, decides when it's eligible, ranks it against others, and invokes it, so the right agent reaches the right user across Copilot, Bing, MSN, Edge, Teams, GroupMe, and more.</p>
+                    </div>
+                    <div class="hero-surfaces" aria-label="Distribution surfaces">
+                        <div class="surface-tile" title="Copilot"><span class="surface-icon" data-surface="copilot"></span><span>Copilot</span></div>
+                        <div class="surface-tile" title="Bing"><span class="surface-icon" data-surface="bing"></span><span>Bing</span></div>
+                        <div class="surface-tile" title="MSN"><span class="surface-icon" data-surface="msn"></span><span>MSN</span></div>
+                        <div class="surface-tile" title="Edge"><span class="surface-icon" data-surface="edge"></span><span>Edge</span></div>
+                        <div class="surface-tile" title="Teams"><span class="surface-icon" data-surface="teams"></span><span>Teams</span></div>
+                        <div class="surface-tile" title="GroupMe"><span class="surface-icon" data-surface="groupme"></span><span>GroupMe</span></div>
+                    </div>
+                </section>
+
+                <!-- Search + filter tabs -->
+                <section class="filter-bar">
+                    <div class="search-box big">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        <input type="text" id="searchInput" placeholder="Search by name, tag, or capability…" />
+                        <input type="text" id="searchInput" placeholder="Search agents, publishers, or capabilities" />
                     </div>
-                </div>
-            </div>
+                    <nav class="filter-tabs" id="filterTabs" role="tablist"></nav>
+                </section>
 
-            <div class="catalog-body" id="catalogBody">
-                <!-- Loading skeleton -->
-                <div class="empty-state" id="loadingState">
-                    <div class="spinner"></div>
-                    <p>Fetching agents from Foundry…</p>
+                <!-- Section header -->
+                <section class="catalog-section-head">
+                    <div>
+                        <div class="eyebrow subtle">AVAILABLE NOW</div>
+                        <h3>Explore all agents</h3>
+                    </div>
+                    <div class="agent-count" id="agentCount">– agents</div>
+                </section>
+
+                <!-- Catalog grid -->
+                <section class="catalog-body" id="catalogBody">
+                    <div class="empty-state" id="loadingState">
+                        <div class="spinner"></div>
+                        <p>Fetching agents from the mesh…</p>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- ============== Detail view ============== -->
+        <main class="view detail-view" id="detailView" hidden>
+            <div class="detail-container">
+                <a href="#" class="back-link" id="backLink">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Agent store
+                </a>
+
+                <div class="detail-header-card" id="detailHeader"></div>
+
+                <div class="detail-layout">
+                    <div class="detail-main" id="detailMain"></div>
+                    <aside class="detail-side" id="detailSide"></aside>
                 </div>
             </div>
         </main>
 
-        <!-- ============== Onboard modal ============== -->
-        <div class="modal-backdrop" id="onboardModal" hidden>
-            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="onboardTitle">
+        <!-- ============== Publish wizard modal ============== -->
+        <div class="modal-backdrop" id="publishModal" hidden>
+            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="publishTitle">
                 <header class="modal-head">
                     <div>
-                        <h3 id="onboardTitle">Onboard a new agent</h3>
-                        <p class="modal-sub">Fill in the details the Orchestrator's <code>/onboard</code> API needs. The agent will be created on Foundry and made discoverable immediately.</p>
+                        <div class="eyebrow tiny">PUBLISH AGENT · <span id="stepIndicator">STEP 1 OF 2</span></div>
+                        <h3 id="publishTitle">Connect the agent</h3>
+                        <p class="modal-sub" id="publishSub">Provide an MCP or supported agent endpoint. We will infer capabilities after publication.</p>
                     </div>
-                    <button class="icon-btn" data-close-modal="onboardModal" aria-label="Close">
+                    <button class="icon-btn" data-close-modal="publishModal" aria-label="Close">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                 </header>
 
-                <form id="onboardForm" class="modal-body form-grid" autocomplete="off">
-                    <div class="field field-span-2">
-                        <label for="fName">Name <span class="req">*</span></label>
-                        <input type="text" id="fName" required placeholder="Contoso Laptops Concierge" />
-                    </div>
-
-                    <div class="field field-span-2">
-                        <label for="fDescription">Description <span class="req">*</span></label>
-                        <textarea id="fDescription" rows="2" required placeholder="Recommends and configures Contoso laptop bundles across gaming, business, and student SKUs."></textarea>
-                    </div>
-
-                    <div class="field">
-                        <label for="fModel">Model <span class="req">*</span></label>
-                        <input type="text" id="fModel" required value="gpt-4o-mini" />
-                        <small>Foundry deployment name.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="fAuthority">Authority</label>
-                        <input type="text" id="fAuthority" placeholder="https://login.microsoftonline.com/<tenant>" />
-                        <small>OIDC issuer the MCP server trusts.</small>
-                    </div>
-
-                    <div class="field field-span-2">
-                        <label for="fInstructions">Instructions <span class="hint">(optional — a default is synthesized)</span></label>
-                        <textarea id="fInstructions" rows="4" placeholder="You are ..."></textarea>
-                    </div>
-
-                    <div class="field">
-                        <label for="fTags">Tags <span class="hint">(comma-separated)</span></label>
-                        <input type="text" id="fTags" placeholder="laptops, gaming, contoso" />
-                        <small>First tag drives the catalog category.</small>
-                    </div>
-
-                    <div class="field">
-                        <label for="fCapabilities">Capabilities <span class="hint">(comma-separated)</span></label>
-                        <input type="text" id="fCapabilities" placeholder="product-search, checkout" />
-                    </div>
-
-                    <div class="field field-span-2 divider">
-                        <span>MCP endpoints</span>
-                    </div>
-
-                    <div class="field field-span-2">
-                        <label for="fMcpUrl">Default MCP server URL</label>
-                        <input type="url" id="fMcpUrl" placeholder="https://mcp.contoso.com" />
-                    </div>
-
-                    <div class="field">
-                        <label for="fMcpLabel">MCP server label</label>
-                        <input type="text" id="fMcpLabel" placeholder="contoso-laptops" />
-                    </div>
-
-                    <div class="field">
-                        <label for="fMcpDiscovery">Discovery MCP URL</label>
-                        <input type="url" id="fMcpDiscovery" placeholder="https://mcp.contoso.com/discover" />
-                    </div>
-
-                    <div class="field">
-                        <label for="fMcpExecution">Execution MCP URL</label>
-                        <input type="url" id="fMcpExecution" placeholder="https://mcp.contoso.com/execute" />
-                    </div>
-
-                    <div class="field">
-                        <label for="fMcpConfirmation">Confirmation MCP URL</label>
-                        <input type="url" id="fMcpConfirmation" placeholder="https://mcp.contoso.com/confirm" />
-                    </div>
-
-                    <div class="field field-span-2 form-actions">
-                        <button type="button" class="ghost-btn" data-close-modal="onboardModal">Cancel</button>
-                        <button type="submit" class="primary-btn" id="submitOnboardBtn">
-                            <span class="btn-label">Onboard agent</span>
-                            <span class="btn-spinner" hidden></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- ============== Agent config modal ============== -->
-        <div class="modal-backdrop" id="detailModal" hidden>
-            <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
-                <header class="modal-head">
-                    <div class="detail-head-info">
-                        <div class="agent-avatar" id="detailAvatar">A</div>
-                        <div>
-                            <h3 id="detailTitle">Agent</h3>
-                            <p class="modal-sub" id="detailSubtitle">agent id</p>
+                <div class="modal-body">
+                    <!-- Info strip -->
+                    <div class="info-strip">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                        <div class="info-strip-text">
+                            <div class="info-strip-title">Connect an agent from your preferred builder</div>
+                            <div class="info-strip-sub">Use a standard MCP or agent API endpoint to publish it here.</div>
+                        </div>
+                        <div class="info-strip-badges" aria-hidden="true">
+                            <span class="info-badge" title="Microsoft Foundry"><img src="/assets/surfaces/Microsoft-Foundry.svg" alt="" /></span>
+                            <span class="info-badge" title="Copilot"><img src="/assets/surfaces/Copilot.svg" alt="" /></span>
+                            <span class="info-badge" title="Edge"><img src="/assets/surfaces/Edge.svg" alt="" /></span>
+                            <span class="info-badge" title="Bing"><img src="/assets/surfaces/Bing.svg" alt="" /></span>
+                            <span class="info-badge" title="Teams"><img src="/assets/surfaces/Teams.svg" alt="" /></span>
+                            <span class="info-badge" title="Launch surfaces"><img src="/assets/surfaces/Launch-icon.svg" alt="" /></span>
                         </div>
                     </div>
-                    <button class="icon-btn" data-close-modal="detailModal" aria-label="Close">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                    </button>
-                </header>
-                <div class="modal-body" id="detailBody">
-                    <!-- populated dynamically -->
+
+                    <!-- Steps indicator -->
+                    <div class="steps-indicator">
+                        <div class="step-dot active" data-step="1">1</div>
+                        <div class="step-line"></div>
+                        <div class="step-dot" data-step="2">2</div>
+                    </div>
+
+                    <!-- Step 1: Connection -->
+                    <section class="wizard-step" id="wizardStep1">
+                        <div class="wizard-card">
+                            <div class="wizard-card-head">
+                                <div class="wizard-card-icon">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                </div>
+                                <div>
+                                    <div class="wizard-card-title">Connection</div>
+                                    <div class="wizard-card-sub">No production credentials are sent in this prototype.</div>
+                                </div>
+                            </div>
+
+                            <div class="field-block">
+                                <label class="field-label">Connection type</label>
+                                <div class="radio-row">
+                                    <label class="radio-pill">
+                                        <input type="radio" name="connType" value="mcp" checked />
+                                        <span>MCP endpoint</span>
+                                    </label>
+                                    <label class="radio-pill">
+                                        <input type="radio" name="connType" value="api" />
+                                        <span>Agent/API endpoint</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="field-block">
+                                <label class="field-label" for="fEndpoint">Endpoint URL</label>
+                                <input type="url" id="fEndpoint" placeholder="https://agents.example.com/mcp" />
+                                <small class="hint-line">All sources connect through a standard MCP or agent API endpoint. Use a URL containing "fail" to preview recovery from a failed connection.</small>
+                            </div>
+
+                            <div class="field-block">
+                                <label class="field-label" for="fAuth">Authentication</label>
+                                <select id="fAuth">
+                                    <option value="apikey">API key</option>
+                                    <option value="oauth">OAuth 2.0 / Entra ID</option>
+                                    <option value="none">None (public)</option>
+                                </select>
+                            </div>
+
+                            <div class="field-block auth-authority" id="authorityBlock" hidden>
+                                <label class="field-label" for="fAuthority">Authority</label>
+                                <input type="text" id="fAuthority" placeholder="https://login.microsoftonline.com/&lt;tenant&gt;" />
+                            </div>
+
+                            <div class="test-connection-row">
+                                <button type="button" class="ghost-btn" id="testConnBtn">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                    Test connection
+                                </button>
+                                <span class="test-result" id="testResult"></span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Step 2: Details -->
+                    <section class="wizard-step" id="wizardStep2" hidden>
+                        <div class="wizard-card">
+                            <div class="wizard-card-head">
+                                <div class="wizard-card-icon">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                                </div>
+                                <div>
+                                    <div class="wizard-card-title">Agent details</div>
+                                    <div class="wizard-card-sub">How this agent appears in the store and to the orchestrator.</div>
+                                </div>
+                            </div>
+
+                            <div class="two-col">
+                                <div class="field-block">
+                                    <label class="field-label" for="fName">Name <span class="req">*</span></label>
+                                    <input type="text" id="fName" required placeholder="Bloom & Parcel" />
+                                </div>
+                                <div class="field-block">
+                                    <label class="field-label" for="fPublisher">Publisher</label>
+                                    <input type="text" id="fPublisher" placeholder="Bloom & Parcel Co." />
+                                </div>
+                            </div>
+
+                            <div class="field-block">
+                                <label class="field-label" for="fDescription">Description <span class="req">*</span></label>
+                                <textarea id="fDescription" rows="2" required placeholder="Designs occasion-ready bouquets from local inventory and coordinates thoughtful delivery."></textarea>
+                            </div>
+
+                            <div class="two-col">
+                                <div class="field-block">
+                                    <label class="field-label" for="fCategory">Category</label>
+                                    <input type="text" id="fCategory" placeholder="Flowers & gifts" />
+                                    <small class="hint-line">Used as the first tag. Drives the store category tab.</small>
+                                </div>
+                                <div class="field-block">
+                                    <label class="field-label" for="fModel">Foundry model</label>
+                                    <input type="text" id="fModel" value="gpt-4o-mini" />
+                                </div>
+                            </div>
+
+                            <div class="field-block">
+                                <label class="field-label" for="fCapabilities">Capabilities</label>
+                                <input type="text" id="fCapabilities" placeholder="Bouquet discovery, Local delivery lookup, Confirmed floral order" />
+                                <small class="hint-line">Comma-separated. Shown as capability chips on the store card.</small>
+                            </div>
+
+                            <details class="advanced-accordion">
+                                <summary>Advanced (optional)</summary>
+                                <div class="field-block">
+                                    <label class="field-label" for="fTags">Additional tags</label>
+                                    <input type="text" id="fTags" placeholder="flowers, delivery, seattle" />
+                                </div>
+                                <div class="field-block">
+                                    <label class="field-label" for="fInstructions">Instructions</label>
+                                    <textarea id="fInstructions" rows="3" placeholder="You are ..."></textarea>
+                                </div>
+                            </details>
+                        </div>
+                    </section>
                 </div>
+
+                <footer class="modal-foot">
+                    <button type="button" class="ghost-btn" id="wizardBackBtn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                        <span id="wizardBackLabel">Cancel</span>
+                    </button>
+                    <button type="button" class="primary-btn" id="wizardNextBtn">
+                        <span class="btn-label" id="wizardNextLabel">Continue</span>
+                        <span class="btn-spinner" hidden></span>
+                        <svg id="wizardNextIcon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                </footer>
             </div>
         </div>
 
