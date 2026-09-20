@@ -23,77 +23,57 @@
     // Configuration
     // ==========================================================================
 
-    /** Starter prompts shown on the welcome screen. Same wording as the Agent Mesh prototype. */
-    const SUGGESTIONS = [
-        {
-            id: 'laptop',
-            label: 'Find a gaming laptop',
-            desc: 'Under $1,000 — RTX 4060, 16GB, 144Hz',
-            prompt: 'Find me a gaming laptop under $1,000: strong GPU, 16GB RAM, 144Hz, good for video editing too.',
-            actionLabel: 'Buy',
-            gradient: 'linear-gradient(135deg,#4f6bed,#7c8cf8)',
-            iconSvg: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 20h20"/></svg>'
-        },
-        {
-            id: 'pizza',
-            label: 'Order pizza tonight',
-            desc: 'Delivered within the hour',
-            prompt: 'I feel like having pizza tonight, something to arrive in the next hour.',
-            actionLabel: 'Order',
-            gradient: 'linear-gradient(135deg,#e8578c,#f38aa8)',
-            iconSvg: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 11h.01M11 15h.01M16 16h.01M2 12l10-10 10 10-10 10z"/></svg>'
-        }
+    /** Item image pools keyed by category. Any random image from the matching
+     *  category is attached to an option row when the user's prompt implies
+     *  laptops, flights, or food. Anything else leaves rows imageless. */
+    const ITEM_IMAGES = {
+        laptop: [
+            '/assets/items/laptop/dell-2.jpg',
+            '/assets/items/laptop/laptop-1.jpg',
+            '/assets/items/laptop/laptop-3.jpg',
+            '/assets/items/laptop/laptop-4.jpg',
+            '/assets/items/laptop/laptopn-2.png'
+        ],
+        flight: [
+            '/assets/items/flight/flight.jpg',
+            '/assets/items/flight/flight-2.jpg',
+            '/assets/items/flight/flight-3.jpg',
+            '/assets/items/flight/flight-4.jpg'
+        ],
+        food: [
+            '/assets/items/food/burger-1.jpg',
+            '/assets/items/food/pasta-2.jpg',
+            '/assets/items/food/pizza-1.jpg',
+            '/assets/items/food/pizza-2.jpg',
+            '/assets/items/food/pizza-3.jpg'
+        ]
+    };
+
+    /** Labels cycled through by the pay/confirm loader. */
+    const CONFIRM_LOADER_STEPS = [
+        'Matching identity…',
+        'Matching identity, payment…',
+        'Matching identity, payment, address…'
     ];
 
     const AGENT_TONES = ['brand', 'success', 'warning'];
 
+    /** Sample follow-up prompts shown in the "chat with agent" banner. Keyed by the
+     *  imageCategory the prompt fell into so the chips feel contextual. */
+    const SOLO_SAMPLE_PROMPTS = {
+        laptop: ['Which is best for 4K video editing?', 'Is there a discount?'],
+        flight: ['Any nonstop options?', "What's the cheapest fare?"],
+        food:   ["What are today's specials?", 'Any vegetarian options?'],
+        default: ["What's your top recommendation?", 'Any current offers?']
+    };
+
     /**
-     * Product photography, keyed by a keyword to look for inside the option
-     * details / option id. First match wins. Purely cosmetic — the API doesn't
-     * return image URLs.
+     * NOTE: Static product photography and brand logos used to live here. They've been
+     * removed — every card now renders solely from what the hosted agent actually
+     * returns (title / description / attributes), with initials-based avatars as the
+     * only visual fallback. If you need imagery back, have the agent supply URLs
+     * in the option payload instead of adding client-side keyword tables.
      */
-    const IMAGE_KEYWORDS = [
-        // Laptops
-        { kw: 'legion slim', src: '/assets/agent-mesh/laptop-legion-slim-5.jpg' },
-        { kw: 'legion pro', src: '/assets/agent-mesh/laptop-legion-pro-5.jpg' },
-        { kw: 'loq', src: '/assets/agent-mesh/laptop-loq-15.jpg' },
-        { kw: 'legion', src: '/assets/agent-mesh/laptop-legion-slim-5.jpg' },
-        { kw: 'omen transcend', src: '/assets/agent-mesh/laptop-omen-transcend-14.jpg' },
-        { kw: 'omen 16', src: '/assets/agent-mesh/laptop-omen-16.jpg' },
-        { kw: 'omen', src: '/assets/agent-mesh/laptop-omen-16.jpg' },
-        { kw: 'victus', src: '/assets/agent-mesh/laptop-hp-victus-15.jpg' },
-        { kw: 'alienware', src: '/assets/agent-mesh/laptop-alienware-m16.jpg' },
-        { kw: 'g16', src: '/assets/agent-mesh/laptop-dell-g16.jpg' },
-        { kw: 'g15', src: '/assets/agent-mesh/laptop-dell-g15.jpg' },
-        { kw: 'dell', src: '/assets/agent-mesh/laptop-dell-g15.jpg' },
-        { kw: 'hp', src: '/assets/agent-mesh/laptop-hp-victus-15.jpg' },
-
-        // Pizzas
-        { kw: 'hawaiian', src: '/assets/agent-mesh/pizza-hawaiian.jpg' },
-        { kw: 'pepperoni', src: '/assets/agent-mesh/pizza-pepperoni.jpg' },
-        { kw: 'veggie', src: '/assets/agent-mesh/pizza-veggie.jpg' },
-        { kw: 'vegetarian', src: '/assets/agent-mesh/pizza-veggie.jpg' },
-        { kw: 'margherita', src: '/assets/agent-mesh/pizza-margherita.jpg' },
-        { kw: 'slice', src: '/assets/agent-mesh/pizza-board.jpg' },
-        { kw: "joe's", src: '/assets/agent-mesh/pizza-classic.jpg' },
-        { kw: 'classic pie', src: '/assets/agent-mesh/pizza-classic.jpg' },
-        { kw: 'pizza hut', src: '/assets/agent-mesh/pizza-hawaiian.jpg' },
-        { kw: 'blaze', src: '/assets/agent-mesh/pizza-veggie.jpg' },
-        { kw: 'mod', src: '/assets/agent-mesh/pizza-pepperoni.jpg' },
-        { kw: 'pizza', src: '/assets/agent-mesh/pizza-classic.jpg' }
-    ];
-
-    /** Brand logos, matched against agent_name / agent_id (case-insensitive substring). */
-    const LOGO_KEYWORDS = [
-        { kw: 'legion', src: '/assets/agent-mesh/logos/lenovo.svg' },
-        { kw: 'lenovo', src: '/assets/agent-mesh/logos/lenovo.svg' },
-        { kw: 'omen', src: '/assets/agent-mesh/logos/hp.svg' },
-        { kw: 'hp', src: '/assets/agent-mesh/logos/hp.svg' },
-        { kw: 'alienware', src: '/assets/agent-mesh/logos/alienware.svg' },
-        { kw: 'dell', src: '/assets/agent-mesh/logos/dell.svg' },
-        { kw: 'doordash', src: '/assets/agent-mesh/logos/doordash.svg' },
-        { kw: 'uber', src: '/assets/agent-mesh/logos/ubereats.svg' }
-    ];
 
     // ==========================================================================
     // Utilities
@@ -125,15 +105,6 @@
         return null;
     }
 
-    function pickImageFor(option) {
-        const hay = `${option.option_id || ''} ${option.details || ''} ${option.agent_name || ''} ${option.agent_type || ''}`;
-        return firstMatch(IMAGE_KEYWORDS, hay);
-    }
-
-    function logoFor(agentName, agentId) {
-        return firstMatch(LOGO_KEYWORDS, `${agentId || ''} ${agentName || ''}`);
-    }
-
     /** Split "Legion Slim 5 — RTX 4060, Ryzen 7, 16GB, 144Hz — ships in 2 days" into a
      *  short title + a detail string. If no natural split, fall back to a truncated title. */
     function splitDetails(details) {
@@ -152,6 +123,20 @@
         return { title: cap, rest: raw.length > 70 ? raw : '' };
     }
 
+    /** Preferred title for an option — server-provided `title` takes precedence over the
+     *  heuristic split of `details`. */
+    function optionTitle(option) {
+        return (option && typeof option.title === 'string' && option.title.trim())
+            || splitDetails(option && option.details).title;
+    }
+
+    /** Preferred detail body for an option — server-provided `description` beats the
+     *  heuristic split. */
+    function optionDetail(option) {
+        return (option && typeof option.description === 'string' && option.description.trim())
+            || splitDetails(option && option.details).rest;
+    }
+
     /** Try to make a nice short agent name (drop the trailing " Agent" that many
      *  backends append). Preserve the original for the avatar's alt. */
     function displayAgentName(agentName) {
@@ -159,17 +144,11 @@
     }
 
     function renderAvatar(agentId, agentName, tone, size /* 32|24|16 */) {
+        // We no longer render brand logos here — every agent gets an initials-based
+        // avatar so the visual is always sourced from the agent identity the hosted
+        // orchestrator actually returned.
         const wrapper = el('span', `avatar tone-${tone} size-${size}`);
-        const logo = logoFor(agentName, agentId);
-        if (logo) {
-            const img = el('img');
-            img.src = logo;
-            img.alt = '';
-            img.onerror = () => { img.remove(); wrapper.textContent = initials(agentName); };
-            wrapper.appendChild(img);
-        } else {
-            wrapper.textContent = initials(agentName);
-        }
+        wrapper.textContent = initials(agentName);
         return wrapper;
     }
 
@@ -196,7 +175,7 @@
      * @property {'user'|'thinking'|'orchestration'|'purchase'|'assistant'|'error'} type
      */
     const state = {
-        userId: 'demo-user',
+        userId: 'Vardhan Malik',
         sessionId: null,
         /** @type {Turn[]} Ordered transcript. */
         turns: [],
@@ -207,6 +186,8 @@
         activeChatId: null,
         /** Suggestion the user picked most recently — controls default Buy/Order label. */
         suggestionActionLabel: 'Buy',
+        /** When set, only prompts routed to this agent are shown/sent. */
+        soloAgent: null, // { agentId, agentName, imageCategory }
         toasts: []
     };
 
@@ -228,7 +209,7 @@
     const apiStatus = $('apiStatus');
     const newChatBtn = $('newChatBtn');
     const clearBtn = $('clearBtn');
-    const suggestionsEl = $('suggestions');
+    const suggestionsEl = null;
     const toastStackEl = $('toastStack');
     const sessionPill = $('sessionPill');
     const sessionIdText = $('sessionIdText');
@@ -318,7 +299,13 @@
                 userId: state.userId,
                 prompt: text,
                 sessionId: state.sessionId,
-                context: { source: 'copilot-agent-mesh-sample' }
+                // Solo mode ("Chat with agent"): sent as a first-class field so the backend
+                // scopes fan-out to this agent alone. The client also filters below in case
+                // the backend didn't honor the hint.
+                ...(state.soloAgent ? { preferredAgentId: state.soloAgent.agentId } : {}),
+                context: {
+                    source: 'copilot-agent-mesh-sample'
+                }
             });
             if (resp && resp.sessionId) {
                 state.sessionId = resp.sessionId;
@@ -329,26 +316,60 @@
 
             const status = (resp && resp.status) || '';
             const message = (resp && resp.message) || '';
-            const options = Array.isArray(resp && resp.options) ? resp.options : [];
+            let options = Array.isArray(resp && resp.options) ? resp.options : [];
 
             if (status === 'Informational' || (status === 'NeedsAddress' && !options.length)) {
                 pushTurn({ id: makeId(), type: 'assistant', text: message || 'Okay.' });
                 return;
             }
+
+            // In solo mode, keep only the active agent's options — this is what makes
+            // the follow-up prompt behave as if it were routed to that agent alone.
+            if (state.soloAgent) {
+                options = options.filter((o) =>
+                    (o.agent_id && o.agent_id === state.soloAgent.agentId)
+                    || (o.agent_name && o.agent_name === state.soloAgent.agentName));
+            }
+
             if (!options.length) {
                 pushTurn({
                     id: makeId(),
                     type: 'assistant',
-                    text: message || 'No agents returned options for that request. Try refining the prompt.'
+                    text: message
+                        || (state.soloAgent
+                            ? `${displayAgentName(state.soloAgent.agentName)} didn't have anything for that. Try refining the prompt.`
+                            : 'No agents returned options for that request. Try refining the prompt.')
                 });
                 return;
             }
+            const agents = groupOptionsByAgent(options);
+            // Image category: the current prompt wins. Solo mode only supplies a
+            // fallback when the prompt itself doesn't disambiguate (e.g. "any deals?"
+            // while chatting with a laptop agent). Without this, chatting with a
+            // laptop agent and asking for "burger options" would render laptop
+            // thumbnails on the burger cards.
+            const promptImageCategory = pickImageCategoryForPrompt(text);
+            const orchestrationImageCategory = promptImageCategory
+                || (state.soloAgent ? state.soloAgent.imageCategory : null);
+
+            // Assign one image per option for THIS turn. We overwrite any prior
+            // `_imgSrc` on the same option reference so a category change (laptop →
+            // food) can't leave a stale thumbnail behind.
+            agents.forEach((group) => {
+                group.options.forEach((opt) => {
+                    opt._imgSrc = orchestrationImageCategory
+                        ? pickRandomImage(orchestrationImageCategory)
+                        : null;
+                });
+            });
+
             pushTurn({
                 id: makeId(),
                 type: 'orchestration',
-                message,
-                agents: groupOptionsByAgent(options),
-                actionLabel: state.suggestionActionLabel
+                message: composeDiscoverPreamble(message, agents, text),
+                agents,
+                actionLabel: state.suggestionActionLabel,
+                imageCategory: orchestrationImageCategory
             });
         } catch (err) {
             removeTurn(thinkingId);
@@ -358,9 +379,66 @@
 
     function pickActionLabelForPrompt(text) {
         const t = (text || '').toLowerCase();
-        if (/pizza|food|deliver|dinner|lunch|breakfast|meal|eat/.test(t)) return 'Order';
+        if (/pizza|food|deliver|dinner|lunch|breakfast|meal|eat|parcel|pickup|pick up/.test(t)) return 'Order';
         if (/flight|hotel|book|reservation|stay|trip|travel/.test(t)) return 'Book';
         return 'Buy';
+    }
+
+    /** Map the user's prompt to one of the item-image categories, or null when the
+     *  request doesn't fall in laptop / flight / food. */
+    function pickImageCategoryForPrompt(text) {
+        const t = (text || '').toLowerCase();
+        if (/laptop|notebook|macbook|chromebook|gaming pc|pc\b/.test(t)) return 'laptop';
+        if (/flight|airfare|airline|trip|travel|fly to|fly from/.test(t)) return 'flight';
+        if (/pizza|burger|food|meal|dinner|lunch|breakfast|eat|indian food|pasta|jalebi|dessert|restaurant/.test(t)) return 'food';
+        return null;
+    }
+
+    function pickRandomImage(category) {
+        const pool = ITEM_IMAGES[category];
+        if (!Array.isArray(pool) || pool.length === 0) return null;
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    /**
+     * Build a short (2-3 line) preamble to render above the agent cards. Prefer the
+     * backend's own message when it's substantive; otherwise synthesize one from the
+     * grouped agents so the transcript always reads like an explanation, not a bare
+     * list of cards.
+     */
+    function composeDiscoverPreamble(backendMessage, agents, userPrompt) {
+        const msg = (backendMessage || '').trim();
+        // If the backend already gave us at least a sentence or two, trust it.
+        if (msg && msg.length > 40) return msg;
+
+        if (!Array.isArray(agents) || agents.length === 0) return msg;
+
+        const soloName = state.soloAgent ? displayAgentName(state.soloAgent.agentName) : null;
+
+        // Compact agent list, all on one line: "Name (pitch, N options)" comma-separated.
+        const agentSummaries = agents.slice(0, 4).map((g) => {
+            const name = displayAgentName(g.agentName);
+            const pitch = (g.agentType || '').trim();
+            const count = g.options.length;
+            const parts = [];
+            if (pitch) parts.push(pitch);
+            if (count) parts.push(`${count} option${count === 1 ? '' : 's'}`);
+            return parts.length ? `${name} (${parts.join(', ')})` : name;
+        });
+
+        const joined = agentSummaries.join(', ');
+        const promptSnippet = truncatePrompt(userPrompt, 60);
+
+        if (soloName) {
+            return `Here's what ${soloName} came back with for "${promptSnippet}": ${joined}.`;
+        }
+        return `Here are the options I found for "${promptSnippet}" — ${agents.length} agent${agents.length === 1 ? '' : 's'} fit this ask: ${joined}.`;
+    }
+
+    function truncatePrompt(text, max) {
+        const t = (text || '').trim();
+        if (t.length <= max) return t;
+        return t.slice(0, max - 1).trimEnd() + '…';
     }
 
     /** Group AgentOption[] into a stable order of { agentId, agentName, agentType, options[] }. */
@@ -426,6 +504,7 @@
         state.turns = [];
         state.purchaseInFlight = false;
         state.suggestionActionLabel = 'Buy';
+        state.soloAgent = null;
         sessionPill.hidden = true;
         sessionIdText.textContent = '';
         welcomeEl.hidden = false;
@@ -433,6 +512,7 @@
         promptEl.value = '';
         autosizePrompt();
         setSendEnabled(false);
+        updateComposerForSolo();
         renderChatList();
         render();
     }
@@ -453,16 +533,14 @@
         if (state.purchaseInFlight) return;
         state.purchaseInFlight = true;
         const flowId = makeId();
-        const info = splitDetails(option.details);
         pushTurn({
             id: flowId,
             type: 'purchase',
             stage: 'executing',
             option,
             actionLabel: actionLabel || state.suggestionActionLabel,
-            title: info.title,
-            detail: info.rest,
-            image: pickImageFor(option),
+            title: optionTitle(option),
+            detail: optionDetail(option),
             price: option.price || ''
         });
 
@@ -491,14 +569,28 @@
     async function handleConfirmPurchase(flowId) {
         const turn = state.turns.find((t) => t.id === flowId);
         if (!turn) return;
-        updateTurn(flowId, { stage: 'confirming' });
+        // Kick off the cycling loader labels so the user sees a progression through
+        // "identity → payment → address" while the confirm call is in flight.
+        updateTurn(flowId, { stage: 'confirming', loaderLabel: CONFIRM_LOADER_STEPS[0] });
+        let loaderIdx = 0;
+        const loaderTimer = setInterval(() => {
+            loaderIdx = Math.min(loaderIdx + 1, CONFIRM_LOADER_STEPS.length - 1);
+            updateTurn(flowId, { loaderLabel: CONFIRM_LOADER_STEPS[loaderIdx] });
+        }, 700);
+        // Enforce a minimum visible time so all three loader phases render even when
+        // the API responds instantly.
+        const minDelay = new Promise((r) => setTimeout(r, 2100));
         try {
-            const resp = await callApi('/api/orchestrator/confirm', {
-                userId: state.userId,
-                sessionId: state.sessionId,
-                optionId: turn.option.option_id,
-                prompt: 'Please confirm this booking.'
-            });
+            const [resp] = await Promise.all([
+                callApi('/api/orchestrator/confirm', {
+                    userId: state.userId,
+                    sessionId: state.sessionId,
+                    optionId: turn.option.option_id,
+                    prompt: 'Please confirm this booking.'
+                }),
+                minDelay
+            ]);
+            clearInterval(loaderTimer);
             const orderNumber = (resp && resp.confirmation && resp.confirmation.confirmationId) || makeOrderNumber();
             const statusLabel = (resp && resp.message) || 'Order placed';
             updateTurn(flowId, {
@@ -514,6 +606,7 @@
                 state.purchaseInFlight = false;
             }, 900);
         } catch (err) {
+            clearInterval(loaderTimer);
             state.purchaseInFlight = false;
             updateTurn(flowId, {
                 stage: 'error',
@@ -587,6 +680,7 @@
             case 'orchestration': return renderOrchestrationTurn(turn);
             case 'purchase':      return renderPurchaseTurn(turn);
             case 'assistant':     return renderAssistantTurn(turn.text);
+            case 'solo-banner':   return renderSoloBanner(turn);
             case 'error':         return renderErrorTurn(turn.text);
             default:              return null;
         }
@@ -621,6 +715,81 @@
         return wrap;
     }
 
+    // ---- Solo-agent banner ("You're now chatting with X Agent") -----------------
+
+    function renderSoloBanner(turn) {
+        const wrap = el('div', 'solo-banner');
+
+        const divider = el('div', 'solo-divider');
+        divider.appendChild(el('span', 'solo-divider-line'));
+        divider.appendChild(el('span', 'solo-divider-text',
+            `You're now chatting with ${displayAgentName(turn.agentName)} Agent`));
+        divider.appendChild(el('span', 'solo-divider-line'));
+        wrap.appendChild(divider);
+
+        const askLabel = el('div', 'solo-ask', 'Ask a question, or try:');
+        wrap.appendChild(askLabel);
+
+        const chipRow = el('div', 'solo-chips');
+        (turn.samples || []).forEach((prompt) => {
+            const chip = el('button', 'solo-chip', prompt);
+            chip.type = 'button';
+            chip.addEventListener('click', () => {
+                if (!state.soloAgent) return; // exited before click
+                handleSubmit(prompt);
+            });
+            chipRow.appendChild(chip);
+        });
+        wrap.appendChild(chipRow);
+        return wrap;
+    }
+
+    function activateSoloAgent(group, imageCategory) {
+        state.soloAgent = {
+            agentId: group.agentId,
+            agentName: group.agentName,
+            imageCategory: imageCategory || null
+        };
+        const samples = SOLO_SAMPLE_PROMPTS[imageCategory || 'default']
+            || SOLO_SAMPLE_PROMPTS.default;
+        pushTurn({
+            id: makeId(),
+            type: 'solo-banner',
+            agentName: group.agentName,
+            samples
+        });
+        updateComposerForSolo();
+        // Re-render existing orchestration turns so the "Chat with agent" pill hides
+        // on the card that's now the active solo agent.
+        render();
+    }
+
+    function exitSoloAgent() {
+        state.soloAgent = null;
+        updateComposerForSolo();
+        render();
+    }
+
+    function updateComposerForSolo() {
+        // Chip inside the composer for the active solo agent, with an × to exit.
+        composerTagsEl.innerHTML = '';
+        if (state.soloAgent) {
+            const short = displayAgentName(state.soloAgent.agentName);
+            const chip = el('span', 'composer-tag');
+            chip.appendChild(document.createTextNode(`@${short}`));
+            const close = el('button', null);
+            close.type = 'button';
+            close.setAttribute('aria-label', 'Exit chat with agent');
+            close.innerHTML = ICON_CLOSE;
+            close.addEventListener('click', exitSoloAgent);
+            chip.appendChild(close);
+            composerTagsEl.appendChild(chip);
+            promptEl.placeholder = `Message ${short}`;
+        } else {
+            promptEl.placeholder = 'Message Copilot… (Enter to send, Shift+Enter for a new line)';
+        }
+    }
+
     // ---- Orchestration turn (analysis + agent cards) ----------------------------
 
     function renderOrchestrationTurn(turn) {
@@ -631,13 +800,13 @@
         const cards = el('div', 'orchestration-cards');
         turn.agents.forEach((group, index) => {
             const tone = AGENT_TONES[index % AGENT_TONES.length];
-            cards.appendChild(renderAgentResultCard(group, tone, turn.actionLabel));
+            cards.appendChild(renderAgentResultCard(group, tone, turn.actionLabel, turn.imageCategory));
         });
         wrap.appendChild(cards);
         return wrap;
     }
 
-    function renderAgentResultCard(group, tone, actionLabel) {
+    function renderAgentResultCard(group, tone, actionLabel, imageCategory) {
         const card = el('div', 'card');
 
         // Header: identity.
@@ -654,30 +823,50 @@
         }
         identity.appendChild(identityText);
         header.appendChild(identity);
+
+        // "Chat with agent" pill — activates solo mode so subsequent prompts route
+        // only to this agent. Hidden when we're already talking to this agent solo.
+        if (!state.soloAgent || state.soloAgent.agentId !== group.agentId) {
+            const chatBtn = el('button', 'chat-with-agent-btn');
+            chatBtn.type = 'button';
+            chatBtn.title = `Chat with ${displayAgentName(group.agentName)} only`;
+            chatBtn.innerHTML =
+                '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+                '<span>Chat with agent</span>';
+            chatBtn.addEventListener('click', () => activateSoloAgent(group, imageCategory));
+            header.appendChild(chatBtn);
+        }
         card.appendChild(header);
 
         // Body: pick list — one row per option.
         const body = el('div', 'card-body');
         const list = el('ul', 'pick-list');
-        group.options.forEach((opt) => list.appendChild(renderPickRow(opt, actionLabel)));
+        group.options.forEach((opt) => list.appendChild(renderPickRow(opt, actionLabel, imageCategory)));
         body.appendChild(list);
         card.appendChild(body);
 
         return card;
     }
 
-    function renderPickRow(option, actionLabel) {
+    function renderPickRow(option, actionLabel, imageCategory) {
         const li = el('li', 'pick-row');
         const main = el('div', 'pick-main');
 
-        // Thumbnail (heuristic image lookup).
-        const img = el('img', 'pick-thumb');
-        const src = pickImageFor(option);
-        if (src) {
-            img.src = src;
-            img.alt = '';
+        // Category-based product image when the prompt is for laptop / flight / food;
+        // otherwise fall back to an initials placeholder (server never supplies imagery).
+        // The image is picked once at discover time and memoized on the option so
+        // re-renders (Pay/Confirm state changes) don't swap thumbnails.
+        let imgSrc = option._imgSrc || null;
+        if (!imgSrc && imageCategory) {
+            imgSrc = pickRandomImage(imageCategory);
+            option._imgSrc = imgSrc;
+        }
+        if (imgSrc) {
+            const img = document.createElement('img');
+            img.className = 'pick-thumb';
+            img.src = imgSrc;
+            img.alt = option.agent_name || 'Option';
             img.loading = 'lazy';
-            img.onerror = () => img.remove();
             main.appendChild(img);
         } else {
             const placeholder = el('div', 'pick-thumb pick-thumb-placeholder');
@@ -685,22 +874,25 @@
             main.appendChild(placeholder);
         }
 
-        // Title + detail.
-        const info = splitDetails(option.details);
+        // Title + detail. Prefer server-provided title/description so we surface
+        // the concrete offer (e.g. "Margherita Pizza (12in)") instead of guessing
+        // from a free-form details string.
+        const title = optionTitle(option);
+        const rest = optionDetail(option);
         const name = el('div', 'pick-name');
         const headline = el('div', 'pick-headline');
-        headline.appendChild(el('span', 'pick-title', info.title));
+        headline.appendChild(el('span', 'pick-title', title));
         name.appendChild(headline);
-        if (info.rest) {
+        if (rest) {
             const detail = el('span', 'pick-detail');
-            detail.textContent = info.rest.length > 140 ? info.rest.slice(0, 140).trim() + '…' : info.rest;
+            detail.textContent = rest.length > 140 ? rest.slice(0, 140).trim() + '…' : rest;
             name.appendChild(detail);
         }
 
         // Expandable "more info" if the details were truncated.
         let moreInfo = null;
-        if (info.rest && info.rest.length > 140) {
-            moreInfo = el('p', 'more-info', info.rest);
+        if (rest && rest.length > 140) {
+            moreInfo = el('p', 'more-info', rest);
             moreInfo.hidden = true;
             name.appendChild(moreInfo);
         }
@@ -740,7 +932,7 @@
     function renderPurchaseTurn(turn) {
         switch (turn.stage) {
             case 'executing':  return renderPurchaseLoading(turn, 'Contacting the agent…');
-            case 'confirming': return renderPurchaseLoading(turn, 'Confirming with the agent…');
+            case 'confirming': return renderPurchaseLoading(turn, turn.loaderLabel || CONFIRM_LOADER_STEPS[0]);
             case 'confirm':    return renderPurchaseConfirm(turn);
             case 'success':    return renderPurchaseSuccess(turn);
             case 'tracking':   return renderOrderTracking(turn);
@@ -761,6 +953,25 @@
         return wrap;
     }
 
+    // Small "Edit" affordance rendered at the end of a detail row. Uses a native
+    // prompt() to keep the sample lightweight — the new value is stored on the turn
+    // as an override so it survives re-renders and is reflected in Pay flow.
+    function renderEditCta(onClick) {
+        const btn = el('button', 'edit-cta', 'Edit');
+        btn.type = 'button';
+        btn.addEventListener('click', onClick);
+        return btn;
+    }
+
+    function editConfirmField(turn, key, currentValue, label) {
+        const next = window.prompt(`Edit ${label}`, currentValue);
+        if (next === null) return; // cancelled
+        const trimmed = next.trim();
+        if (!trimmed || trimmed === currentValue) return;
+        const overrides = { ...(turn.confirmOverrides || {}), [key]: trimmed };
+        updateTurn(turn.id, { confirmOverrides: overrides });
+    }
+
     function renderPurchaseConfirm(turn) {
         const wrap = renderPurchaseWrap(turn);
         const card = el('div', 'card');
@@ -778,15 +989,9 @@
         const previewDetail = preview.description || turn.detail;
         const previewPrice = formatPreviewPrice(preview, turn.price);
 
-        // Item row.
+        // Item row (no static imagery — the agent provides the text; the icon
+        // slot stays empty so the layout still reads as a product line).
         const item = el('div', 'item-row');
-        if (turn.image) {
-            const img = el('img', 'item-thumb');
-            img.src = turn.image;
-            img.alt = '';
-            img.onerror = () => img.remove();
-            item.appendChild(img);
-        }
         const itemText = el('div', 'item-text');
         itemText.appendChild(el('div', 'item-title', previewTitle));
         if (previewDetail) itemText.appendChild(el('div', 'item-detail', previewDetail));
@@ -805,23 +1010,29 @@
         const attrRows = buildPreviewAttributeRows(preview);
         attrRows.forEach((row) => body.appendChild(row));
 
-        // Detail rows: delivery address (only when the domain has one) + payment.
-        const deliveryAddress = preview.delivery_address
-            || (turn.executeResp && turn.executeResp.metadata && turn.executeResp.metadata.deliveryAddress)
-            || '';
-        if (deliveryAddress) {
-            const address = el('div', 'detail-row');
-            address.innerHTML = `<span class="detail-icon">${ICON_LOCATION}</span>`;
-            address.appendChild(el('div', 'detail-text', deliveryAddress));
-            address.appendChild(el('span', 'detail-hint', 'Delivery address'));
-            body.appendChild(address);
-        }
+        // Delivery address — the agent's structured preview wins when present, otherwise
+        // we show a demo address so the confirm card always reads as a complete order.
+        // A per-turn override lets the user tap "Edit" to change either value in place.
+        const overrides = turn.confirmOverrides || {};
+        const deliveryAddress = overrides.delivery_address
+            || preview.delivery_address
+            || '742 Evergreen Terrace, Springfield, IL 62704';
+        const addressRow = el('div', 'detail-row');
+        addressRow.innerHTML = `<span class="detail-icon">${ICON_LOCATION}</span>`;
+        addressRow.appendChild(el('div', 'detail-text', deliveryAddress));
+        addressRow.appendChild(el('span', 'detail-hint', 'Delivery address'));
+        addressRow.appendChild(renderEditCta(() => editConfirmField(turn, 'delivery_address', deliveryAddress, 'delivery address')));
+        body.appendChild(addressRow);
 
-        const paymentMethod = preview.payment_method || 'Payment method on file';
+        // Payment — same pattern: prefer the agent's value, otherwise show a demo card.
+        const paymentMethod = overrides.payment_method
+            || preview.payment_method
+            || 'Visa •••• 4242 (Personal)';
         const payment = el('div', 'detail-row');
         payment.innerHTML = `<span class="detail-icon">${ICON_PAYMENT}</span>`;
         payment.appendChild(el('div', 'detail-text', paymentMethod));
         payment.appendChild(el('span', 'detail-hint', 'Saved payment'));
+        payment.appendChild(renderEditCta(() => editConfirmField(turn, 'payment_method', paymentMethod, 'payment method')));
         body.appendChild(payment);
 
         if (previewPrice) {
@@ -977,13 +1188,6 @@
         const body = el('div', 'card-body');
 
         const item = el('div', 'item-row');
-        if (turn.image) {
-            const img = el('img', 'item-thumb');
-            img.src = turn.image;
-            img.alt = '';
-            img.onerror = () => img.remove();
-            item.appendChild(img);
-        }
         const itemText = el('div', 'item-text');
         itemText.appendChild(el('div', 'item-title', turn.title));
         if (turn.detail) itemText.appendChild(el('div', 'item-detail', turn.detail));
@@ -996,12 +1200,14 @@
         const stepper = el('div', 'stepper');
         steps.forEach((label, index) => {
             const step = el('div', 'step' + (index === 0 ? ' current' : ''));
-            const icon = el('span', 'step-icon');
+            // "Confirmed" is the completed step — tick renders in the green success colour.
+            const icon = el('span', 'step-icon' + (index === 0 ? ' done' : ''));
             icon.innerHTML = index === 0 ? ICON_CHECK_SMALL : ICON_CIRCLE_SMALL;
             step.appendChild(icon);
-            step.appendChild(el('span', 'step-label', label));
+            const labelEl = el('span', 'step-label' + (index === 0 ? ' active' : ''), label);
+            step.appendChild(labelEl);
             stepper.appendChild(step);
-            if (index < steps.length - 1) stepper.appendChild(el('span', 'step-line'));
+            if (index < steps.length - 1) stepper.appendChild(el('span', 'step-line' + (index === 0 ? ' done' : '')));
         });
         body.appendChild(stepper);
         card.appendChild(body);
@@ -1031,43 +1237,13 @@
         sendBtn.disabled = !enabled;
     }
 
-    function seedSuggestion(id) {
-        const suggestion = SUGGESTIONS.find((s) => s.id === id);
-        if (!suggestion) return;
-        state.suggestionActionLabel = suggestion.actionLabel;
-        promptEl.value = suggestion.prompt;
-        autosizePrompt();
-        setSendEnabled(true);
-        promptEl.focus();
-        handleSubmit(suggestion.prompt);
-        promptEl.value = '';
-        autosizePrompt();
-        setSendEnabled(false);
-    }
-
     // ==========================================================================
     // Wiring
     // ==========================================================================
 
     function wireSuggestions() {
-        if (!suggestionsEl) return;
-        // Re-render suggestions from SUGGESTIONS so they stay in sync with data.
-        suggestionsEl.innerHTML = '';
-        SUGGESTIONS.forEach((s) => {
-            const btn = el('button', 'suggestion-card');
-            btn.type = 'button';
-            btn.dataset.scenario = s.id;
-            const icon = el('div', 'sg-icon');
-            icon.style.background = s.gradient;
-            icon.innerHTML = s.iconSvg;
-            const body = el('div', 'sg-body');
-            body.appendChild(el('div', 'sg-title', s.label));
-            body.appendChild(el('div', 'sg-desc', s.desc));
-            btn.appendChild(icon);
-            btn.appendChild(body);
-            btn.addEventListener('click', () => seedSuggestion(s.id));
-            suggestionsEl.appendChild(btn);
-        });
+        // Welcome-screen suggestion cards were removed — the composer is now the only
+        // entry point. Kept as a no-op to preserve boot ordering.
     }
 
     function wireComposer() {
@@ -1103,7 +1279,7 @@
             render();
         });
         userIdInput.addEventListener('change', () => {
-            state.userId = userIdInput.value.trim() || 'demo-user';
+            state.userId = userIdInput.value.trim() || 'Vardhan Malik';
             userIdInput.value = state.userId;
         });
     }
@@ -1113,7 +1289,7 @@
     // ==========================================================================
 
     function boot() {
-        state.userId = userIdInput.value.trim() || 'demo-user';
+        state.userId = userIdInput.value.trim() || 'Vardhan Malik';
         wireSuggestions();
         wireComposer();
         wireSidebar();

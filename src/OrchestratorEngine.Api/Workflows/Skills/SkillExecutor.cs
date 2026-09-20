@@ -65,23 +65,42 @@ public sealed class SkillExecutor : ISkillExecutor
         var (promptDomain, promptScore) = ClassifyDomain(prompt);
         if (string.IsNullOrEmpty(promptDomain))
         {
+            // When the prompt can't be classified into any known domain, DO NOT fan out to
+            // every agent — that's how a Lenovo (electronics) agent ended up answering a
+            // vague food prompt with hallucinated generic options. Instead, keep only agents
+            // that are themselves domain-neutral (no classified domain). If none, return
+            // empty and let the workflow surface a clarification.
+            var neutral = allAgents
+                .Where(a => string.IsNullOrEmpty(ClassifyAgent(a).Domain))
+                .ToList();
             _logger.LogInformation(
-                "FetchAgents: prompt could not be classified into a known domain; passing through all {Count} agents.",
-                allAgents.Count);
-            return allAgents;
+                "FetchAgents: prompt did not classify into a known domain; keeping only domain-neutral agents. Kept {Kept}/{Total}. Kept=[{Names}]",
+                neutral.Count, allAgents.Count,
+                string.Join(", ", neutral.Select(a => $"'{a.Name}'")));
+            return neutral;
         }
 
-        var matching = allAgents
-            .Where(a =>
-            {
-                var (agentDomain, _) = ClassifyAgent(a);
-                return string.Equals(agentDomain, promptDomain, StringComparison.OrdinalIgnoreCase);
-            })
-            .ToList();
+        var matching = new List<AgentInfo>();
+        foreach (var a in allAgents)
+        {
+            var (agentDomain, agentScore) = ClassifyAgent(a);
+            // Strict: an agent must classify to the SAME domain as the prompt.
+            // Previously an agent with no classified domain (agentDomain == "") was silently
+            // dropped, which is the desired behavior here too — a truly generic agent should
+            // not answer a food prompt with fabricated food options.
+            var keep = !string.IsNullOrEmpty(agentDomain)
+                && string.Equals(agentDomain, promptDomain, StringComparison.OrdinalIgnoreCase);
+            _logger.LogInformation(
+                "FetchAgents classify: id={AgentId} name='{Name}' surface={Surface} → domain='{AgentDomain}' (score={AgentScore}) — {Decision}",
+                a.AgentId, a.Name, a.Surface, agentDomain, agentScore,
+                keep ? "KEEP" : $"DROP (want '{promptDomain}')");
+            if (keep) matching.Add(a);
+        }
 
         _logger.LogInformation(
-            "FetchAgents: prompt classified as '{Domain}' (score={Score}); {Kept}/{Total} agents match that domain.",
-            promptDomain, promptScore, matching.Count, allAgents.Count);
+            "FetchAgents: prompt classified as '{Domain}' (score={Score}); {Kept}/{Total} agents match that domain. Kept=[{Names}]",
+            promptDomain, promptScore, matching.Count, allAgents.Count,
+            string.Join(", ", matching.Select(a => $"'{a.Name}'")));
 
         // If nothing matches, prefer returning empty (so the workflow reports "no suitable agent")
         // over silently fanning out to wrong-domain agents.
@@ -132,11 +151,22 @@ public sealed class SkillExecutor : ISkillExecutor
             .ThenBy(s => s.Agent.AgentId, StringComparer.Ordinal)
             .ToList();
 
+        _logger.LogInformation(
+            "SelectBestAgent ranked ({Count}): [{Ranked}]",
+            ranked.Count,
+            string.Join(", ", ranked.Select(r => $"'{r.Agent.Name}'={r.Score:F2}")));
+
         // Hand the heuristically-ranked candidates to a Foundry LLM for the final call. If no selector
         // agent is configured or the call fails, fall back to the heuristic ranking alone.
         var llmSelection = await TrySelectWithLlmAsync(prompt, ranked, userContext, ct);
         if (llmSelection is { Count: > 0 })
+        {
+            _logger.LogInformation(
+                "SelectBestAgent: LLM selector picked {Count} agent(s): [{Names}]",
+                llmSelection.Count,
+                string.Join(", ", llmSelection.Select(a => $"'{a.Name}'")));
             return llmSelection;
+        }
 
         // Drop agents with score <= 0 so we don't fan out to obviously-wrong agents (e.g. a
         // pizza prompt scoring 0 against Emirates-flight-agent). Cap fan-out to 5 to keep
@@ -148,13 +178,22 @@ public sealed class SkillExecutor : ISkillExecutor
             // fan out — the domain filter in ExecuteFetchAgentsAsync already narrowed the pool.
             // Return up to 3 (not 2) to match the generic-query "top 3 agents × 3 options" shape
             // the WorkflowEngine expects downstream.
-            return ranked.Take(3).Select(s => s.Agent).ToList();
+            var fallback = ranked.Take(3).Select(s => s.Agent).ToList();
+            _logger.LogInformation(
+                "SelectBestAgent: no positively-scored candidates; falling back to top-3 by tie-break: [{Names}]",
+                string.Join(", ", fallback.Select(a => $"'{a.Name}'")));
+            return fallback;
         }
 
-        return positive
+        var chosen = positive
             .Take(5)
             .Select(s => s.Agent)
             .ToList();
+        _logger.LogInformation(
+            "SelectBestAgent: returning {Count} positively-scored agent(s): [{Names}]",
+            chosen.Count,
+            string.Join(", ", chosen.Select(a => $"'{a.Name}'")));
+        return chosen;
     }
 
     private async Task<List<AgentInfo>?> TrySelectWithLlmAsync(
@@ -308,6 +347,16 @@ public sealed class SkillExecutor : ISkillExecutor
             }
 
             var exploded = ExplodeAgentResponseToOptions(summary, agentId, agentName, agentType, raw);
+
+            // Per-agent explode summary — critical for diagnosing "why did only one agent
+            // show up?" cases. Without this, an agent that returned an empty JSON array
+            // (correctly signalling "no matches") looks identical to one that was never
+            // invoked. Log the count and the first-title preview so we can trace back to
+            // the agent that ate a card silently.
+            _logger.LogInformation(
+                "RankOptions: agent {AgentId} ({AgentName}) → {Count} candidate option(s). Titles=[{Titles}]",
+                agentId, agentName, exploded.Count,
+                string.Join(", ", exploded.Take(3).Select(o => $"'{o.Title ?? "(no-title)"}'")));
 
             // Defensively drop options that look like clarification questions rather than concrete
             // offers. The BuildEnrichedPrompt explicitly forbids clarifications, but occasionally an
@@ -510,13 +559,15 @@ public sealed class SkillExecutor : ISkillExecutor
         return true;
     }
 
-    private static List<AgentOption> ExplodeAgentResponseToOptions(
+    private List<AgentOption> ExplodeAgentResponseToOptions(
         string summary, string agentId, string agentName, string agentType, Dictionary<string, object> raw)
     {
         var results = new List<AgentOption>();
         if (string.IsNullOrWhiteSpace(summary))
         {
-            results.Add(BuildFallbackOption(summary, agentId, agentName, agentType, raw));
+            _logger.LogInformation(
+                "RankOptions: agent {AgentId} ({AgentName}) returned an empty summary; treating as no-offer.",
+                agentId, agentName);
             return results;
         }
 
@@ -524,41 +575,73 @@ public sealed class SkillExecutor : ISkillExecutor
         // ```json fences or preface it with markdown text (which itself contains stray brackets
         // like `[emirates.com](https://…)`), so we scan for every candidate span and keep the
         // first one that actually parses.
+        //
+        // IMPORTANT: an agent that returns an empty JSON array (or a wrapper containing an
+        // empty array) is EXPLICITLY telling us "I have no matches for this request". Rule 4
+        // in BuildEnrichedPrompt instructs agents to do exactly that. We must NOT fall through
+        // to BuildFallbackOption in that case — doing so used to surface an empty pick card
+        // whose title was literally "```json" and description was "[]", which is what the user
+        // reported as an "empty option saying json".
+        var sawParsedJson = false;
         foreach (var jsonSpan in ExtractJsonSpans(summary))
         {
             try
             {
                 using var doc = JsonDocument.Parse(jsonSpan);
                 var root = doc.RootElement;
-                if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+                if (root.ValueKind == JsonValueKind.Array)
                 {
+                    sawParsedJson = true;
+                    if (root.GetArrayLength() == 0)
+                    {
+                        _logger.LogInformation(
+                            "RankOptions: agent {AgentId} ({AgentName}) returned an empty JSON array — no matches for this prompt.",
+                            agentId, agentName);
+                        return results; // explicit "nothing from me"; do NOT fabricate a fallback card.
+                    }
                     foreach (var el in root.EnumerateArray())
                         results.Add(BuildOptionFromJsonElement(el, agentId, agentName, agentType, raw, fallbackSummary: summary));
                     break;
                 }
                 if (root.ValueKind == JsonValueKind.Object)
                 {
-                    // Also accept { "options": [ … ] } / { "results": [ … ] } wrappers.
-                    JsonElement inner = default;
-                    var wrapped = false;
-                    foreach (var wrapper in new[] { "options", "results", "offers", "flights" })
+                    sawParsedJson = true;
+                    // Also accept { "options": [ … ] } / { "results": [ … ] } wrappers, INCLUDING
+                    // the empty-array case (same "explicit no-match" semantics as a bare `[]`).
+                    var wrapperName = new[] { "options", "results", "offers", "flights" }
+                        .FirstOrDefault(n => root.TryGetProperty(n, out var w) && w.ValueKind == JsonValueKind.Array);
+                    if (wrapperName is not null)
                     {
-                        if (root.TryGetProperty(wrapper, out var w) && w.ValueKind == JsonValueKind.Array && w.GetArrayLength() > 0)
+                        var inner = root.GetProperty(wrapperName);
+                        if (inner.GetArrayLength() == 0)
                         {
-                            inner = w;
-                            wrapped = true;
-                            break;
+                            _logger.LogInformation(
+                                "RankOptions: agent {AgentId} ({AgentName}) returned {{\"{Wrapper}\": []}} — no matches for this prompt.",
+                                agentId, agentName, wrapperName);
+                            return results;
                         }
-                    }
-                    if (wrapped)
-                    {
                         foreach (var el in inner.EnumerateArray())
                             results.Add(BuildOptionFromJsonElement(el, agentId, agentName, agentType, raw, fallbackSummary: summary));
+                        break;
                     }
-                    else
+
+                    // A bare object with no offers-wrapper: only accept it as an offer if it
+                    // actually carries offer-shaped fields (title / description / price). Anything
+                    // else (e.g. `{}` or `{"status":"ok"}`) is a null response — don't fabricate.
+                    var looksLikeOffer =
+                        root.TryGetProperty("title", out _) ||
+                        root.TryGetProperty("name", out _) ||
+                        root.TryGetProperty("description", out _) ||
+                        root.TryGetProperty("price", out _) ||
+                        root.TryGetProperty("fare", out _);
+                    if (!looksLikeOffer)
                     {
-                        results.Add(BuildOptionFromJsonElement(root, agentId, agentName, agentType, raw, fallbackSummary: summary));
+                        _logger.LogInformation(
+                            "RankOptions: agent {AgentId} ({AgentName}) returned a JSON object with no offer-shaped fields — skipping.",
+                            agentId, agentName);
+                        return results;
                     }
+                    results.Add(BuildOptionFromJsonElement(root, agentId, agentName, agentType, raw, fallbackSummary: summary));
                     break;
                 }
             }
@@ -568,7 +651,11 @@ public sealed class SkillExecutor : ISkillExecutor
             }
         }
 
-        if (results.Count == 0)
+        // If the agent returned free-form prose (no JSON at all), keep the legacy fallback so we
+        // don't silently drop a real offer described in natural language. But if the agent DID
+        // emit parseable JSON and we still got here, that means every JSON structure it produced
+        // was empty/malformed — treat it as no-match rather than showing a "```json" card.
+        if (results.Count == 0 && !sawParsedJson)
             results.Add(BuildFallbackOption(summary, agentId, agentName, agentType, raw));
 
         return results;
@@ -1131,6 +1218,12 @@ public sealed class SkillExecutor : ISkillExecutor
     /// <summary>
     /// Coarse domain classifier for both prompts and agents. Returns the highest-scoring
     /// domain (and its score); or (empty, 0) when no keyword matches at all.
+    ///
+    /// Scoring rules:
+    ///   * Each PRIMARY keyword hit (concrete noun / brand name) weighs 3 points.
+    ///   * Each SECONDARY keyword hit (generic verb / soft cue) weighs 1 point.
+    /// This prevents ambiguous verbs like "order" from beating a strong brand signal like
+    /// "Lenovo" — which is what caused a laptop agent to fan out for a food prompt.
     /// </summary>
     private static (string Domain, int Score) ClassifyDomain(string text)
     {
@@ -1138,56 +1231,113 @@ public sealed class SkillExecutor : ISkillExecutor
         var tokens = TokenizeMeaningful(text);
         if (tokens.Count == 0) return (string.Empty, 0);
 
-        (string, int) best = (string.Empty, 0);
+        (string Domain, int Score) best = (string.Empty, 0);
         foreach (var (domain, keywords) in DomainKeywords)
         {
-            var hits = keywords.Count(k => tokens.Contains(k));
-            if (hits > best.Item2) best = (domain, hits);
+            var primaryHits = keywords.Primary.Count(k => tokens.Contains(k));
+            var secondaryHits = keywords.Secondary.Count(k => tokens.Contains(k));
+            var score = (primaryHits * 3) + secondaryHits;
+
+            // Only classify when we have at least ONE primary hit, OR two+ secondary hits.
+            // A single generic verb ("order") on its own is not enough to claim a domain.
+            var qualifies = primaryHits > 0 || secondaryHits >= 2;
+            if (qualifies && score > best.Score) best = (domain, score);
         }
         return best;
     }
 
     private static (string Domain, int Score) ClassifyAgent(AgentInfo agent)
     {
-        // Also classify by matching AGENT NAME tokens against the keyword table — Foundry
-        // playground agents often have empty description/capabilities, so name is the only
-        // signal (e.g. "Emirates-flight-agent" → flights, "Dominos-agent" → food-delivery).
+        // Prefer the onboarded category tag when present — it's the most reliable signal.
+        // The Agent Mesh onboarding UI persists the user-picked category as tags[0].
+        if (agent.Configuration.TryGetValue("tags", out var tagsObj) && tagsObj is IEnumerable<object> tagsEnum)
+        {
+            foreach (var t in tagsEnum)
+            {
+                var tag = t?.ToString();
+                if (string.IsNullOrWhiteSpace(tag)) continue;
+                var (mapped, _) = ClassifyDomain(tag);
+                if (!string.IsNullOrEmpty(mapped)) return (mapped, 100);
+            }
+        }
+
+        // Otherwise classify from name + description + capabilities.
         var blob = $"{agent.Name} {agent.Description} {string.Join(' ', agent.Capabilities)}";
         return ClassifyDomain(blob);
     }
 
     /// <summary>
-    /// Keyword-to-domain map. Each domain's list contains both category words ("flight",
-    /// "pizza") and known brand/service names ("emirates", "dominos") so agents whose only
-    /// metadata is their brand-y name still classify correctly.
+    /// Keyword-to-domain map, split into PRIMARY (concrete nouns / brand names — strong signal,
+    /// weight 3) and SECONDARY (generic verbs / soft cues — weight 1). Splitting prevents an
+    /// ambiguous verb like "order" from letting a Lenovo agent classify as food-delivery just
+    /// because its description happens to say "help you order the right laptop".
     /// </summary>
-    private static readonly Dictionary<string, string[]> DomainKeywords = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, (string[] Primary, string[] Secondary)> DomainKeywords
+        = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["flights"] = new[]
-        {
-            "flight", "flights", "fly", "flying", "airline", "airlines", "airfare", "airplane",
-            "plane", "aircraft", "airport", "boarding", "ticket", "tickets",
-            "emirates", "airindia", "indigo", "lufthansa", "delta", "united", "jetblue",
-            "southwest", "british", "qatar", "etihad", "singapore", "cathay"
-        },
-        ["hotels"] = new[]
-        {
-            "hotel", "hotels", "stay", "accommodation", "lodging", "motel", "resort", "suite",
-            "checkin", "checkout", "hilton", "marriott", "hyatt", "sheraton", "airbnb", "oyo"
-        },
-        ["food-delivery"] = new[]
-        {
-            "pizza", "pizzas", "burger", "burgers", "sushi", "biryani", "noodles", "pasta",
-            "sandwich", "delivery", "deliver", "takeout", "takeaway", "order", "ordering",
-            "food", "meal", "snack", "cuisine",
-            "dominos", "pizzahut", "mcdonalds", "kfc", "subway", "chipotle", "starbucks",
-            "ubereats", "doordash", "grubhub", "swiggy", "zomato"
-        },
-        ["dining"] = new[]
-        {
-            "restaurant", "restaurants", "dine", "dining", "reservation", "reservations",
-            "dinner", "lunch", "breakfast", "brunch", "table", "tables", "opentable", "resy"
-        }
+        ["flights"] = (
+            Primary: new[]
+            {
+                "flight", "flights", "airline", "airlines", "airfare", "airplane", "aircraft",
+                "airport", "boarding", "ticket", "tickets",
+                "emirates", "airindia", "indigo", "lufthansa", "delta", "jetblue",
+                "southwest", "qatar", "etihad", "cathay"
+            },
+            Secondary: new[] { "fly", "flying", "plane" }
+        ),
+        ["hotels"] = (
+            Primary: new[]
+            {
+                "hotel", "hotels", "accommodation", "lodging", "motel", "resort",
+                "hilton", "marriott", "hyatt", "sheraton", "airbnb", "oyo"
+            },
+            Secondary: new[] { "stay", "suite", "checkin", "checkout" }
+        ),
+        ["food-delivery"] = (
+            Primary: new[]
+            {
+                "pizza", "pizzas", "burger", "burgers", "sushi", "biryani", "noodles", "pasta",
+                "sandwich", "food", "meal", "snack", "cuisine", "dessert", "salad", "ramen",
+                "curry", "taco", "tacos", "sub", "wrap", "wings", "chinese", "indian", "italian",
+                "mexican", "thai", "japanese",
+                "dominos", "pizzahut", "mcdonalds", "kfc", "subway", "chipotle", "starbucks",
+                "ubereats", "doordash", "grubhub", "swiggy", "zomato",
+                // Common intent verbs promoted to primary — "eat/eating/hungry" should classify
+                // food even without a specific cuisine keyword.
+                "eat", "eating", "hungry", "craving"
+            },
+            Secondary: new[] { "delivery", "deliver", "takeout", "takeaway", "order", "ordering" }
+        ),
+        ["dining"] = (
+            Primary: new[]
+            {
+                "restaurant", "restaurants", "reservation", "reservations",
+                "opentable", "resy",
+                "dinner", "lunch", "breakfast", "brunch"
+            },
+            Secondary: new[] { "dine", "dining", "table", "tables" }
+        ),
+        ["electronics"] = (
+            Primary: new[]
+            {
+                // Laptops / computers
+                "laptop", "laptops", "notebook", "notebooks", "ultrabook", "chromebook", "macbook",
+                "computer", "computers", "desktop", "desktops",
+                // Gaming / hardware specs
+                "rtx", "gtx", "rog", "ryzen", "nvidia",
+                "gpu", "cpu", "ssd", "144hz", "165hz", "240hz",
+                // Consumer electronics
+                "smartphone", "iphone", "android", "pixel", "samsung", "galaxy",
+                "tablet", "tablets", "ipad",
+                "monitor", "monitors", "keyboard", "headphone", "headphones",
+                "earbuds", "airpods", "console", "playstation", "xbox", "nintendo",
+                // Storefronts / brands
+                "bestbuy", "newegg", "microcenter", "flipkart",
+                "dell", "hp", "lenovo", "asus", "acer", "msi", "alienware",
+                "omen", "legion", "victus", "predator"
+            },
+            Secondary: new[] { "gaming", "gamer", "intel", "graphics", "ram", "phone", "phones", "display", "mouse", "speaker", "speakers", "switch" }
+        )
     };
 
     private static string ExtractAgentIdFromPrompt(string prompt)

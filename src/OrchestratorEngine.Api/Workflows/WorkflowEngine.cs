@@ -14,7 +14,20 @@ public sealed class WorkflowEngine : IWorkflowEngine
     private readonly ILogger<WorkflowEngine> _logger;
 
     // Cap concurrent fan-out to keep Foundry rate limits happy. Tune via config later if needed.
-    private const int MaxParallelAgentInvocations = 4;
+    // Kept in step with MaxAgentsForGenericFanout below so a fully-filled fan-out doesn't
+    // silently serialize the tail agent (previously 4 threads for a 5-agent fan-out).
+    private const int MaxParallelAgentInvocations = 5;
+
+    // Upper bound on how many same-domain agents we invoke for a generic (no explicit brand)
+    // query. Matches SkillExecutor.ExecuteSelectBestAgentAsync's positive.Take(5) so we don't
+    // trim off ranker output at the fan-out gate — that mismatch is what caused a 4th
+    // same-score flight agent (Qatar Airways) to drop even though the ranker had accepted it.
+    private const int MaxAgentsForGenericFanout = 5;
+
+    // Per-agent option quota when running a generic-query fan-out. Total options surfaced to
+    // the user = MaxAgentsForGenericFanout * MaxOptionsPerAgentGeneric (5 * 3 = 15) before the
+    // ranker's own maxAgents cap kicks in.
+    private const int MaxOptionsPerAgentGeneric = 3;
 
     public WorkflowEngine(
         ISkillExecutor skillExecutor,
@@ -34,9 +47,11 @@ public sealed class WorkflowEngine : IWorkflowEngine
     //  DISCOVER
     // ==========================================================================================
     public async Task<OrchestrationResponse> DiscoverAndRecommendAsync(
-        string prompt, UserContext userContext, string sessionId, CancellationToken ct = default)
+        string prompt, UserContext userContext, string sessionId, string? preferredAgentId = null, CancellationToken ct = default)
     {
-        _logger.LogInformation("Discover workflow started for session {SessionId}", sessionId);
+        _logger.LogInformation(
+            "Discover workflow started for session {SessionId} (preferredAgentId={PreferredAgentId})",
+            sessionId, preferredAgentId ?? "-");
 
         var previousSession = _sessionStore.Get(sessionId);
 
@@ -98,7 +113,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                     _sessionStore.Save(previousSession);
                     _logger.LogInformation(
                         "Discover: user affirmed saved address; resuming parked prompt.");
-                    return await DiscoverAndRecommendAsync(parkedPrompt, userContext, sessionId, ct);
+                    return await DiscoverAndRecommendAsync(parkedPrompt, userContext, sessionId, preferredAgentId, ct);
                 }
                 // No saved address to affirm — fall through, re-ask below.
             }
@@ -114,7 +129,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 _logger.LogInformation(
                     "Discover: captured delivery address for user {UserId}; resuming parked prompt.",
                     userContext.UserId);
-                return await DiscoverAndRecommendAsync(parkedPrompt, userContext, sessionId, ct);
+                return await DiscoverAndRecommendAsync(parkedPrompt, userContext, sessionId, preferredAgentId, ct);
             }
         }
 
@@ -150,75 +165,21 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
         if (needsAddress)
         {
-            // Prefer the session's in-memory address first. Azure Cognitive Search is eventually
-            // consistent, so a GetSavedAddressAsync call immediately after SaveAddressAsync (which
-            // is what happens when we recurse from the pending-prompt branch above) can return
-            // null even though we just wrote it. Falling through to that null on the recursion
-            // re-parked the prompt and asked for the address again — the exact loop the user hit.
+            // Silently resolve the saved delivery address so it can flow into the agent's
+            // enriched prompt — we no longer park the turn or ask the user for it. If we
+            // don't have one on file the agent is expected to use its own default flow.
+            // Prefer the session's in-memory address first (already resolved on a previous
+            // turn) to avoid Azure Cognitive Search's eventual-consistency window.
             deliveryAddress = !string.IsNullOrWhiteSpace(previousSession?.DeliveryAddress)
                 ? previousSession!.DeliveryAddress
                 : await _userContextService.GetSavedAddressAsync(userContext.UserId, ct);
 
-            if (string.IsNullOrWhiteSpace(deliveryAddress))
+            if (previousSession is not null && !string.IsNullOrWhiteSpace(deliveryAddress))
             {
-                var parkedSession = previousSession ?? new SessionState
-                {
-                    SessionId = sessionId,
-                    UserId = userContext.UserId,
-                    OriginalPrompt = prompt,
-                    PromptDomain = promptDomain
-                };
-                parkedSession.PendingPrompt = prompt;
-                parkedSession.DeliveryAddress = null;
-                parkedSession.AddressConfirmed = false;
-                parkedSession.PromptDomain = promptDomain;
-                parkedSession.Options = [];
-                _sessionStore.Save(parkedSession);
-
-                _logger.LogInformation(
-                    "Discover: prompt in domain '{Domain}' needs a delivery address; asking user.", promptDomain);
-
-                return new OrchestrationResponse
-                {
-                    SessionId = sessionId,
-                    Status = OrchestrationStatus.NeedsAddress,
-                    Message = "I can help with that — I just need a delivery address first. Please send me the street address (with city and ZIP if possible) and I'll remember it for next time.",
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["reason"] = "delivery-requires-address",
-                        ["promptDomain"] = promptDomain
-                    }
-                };
-            }
-
-            if (!addressAlreadyConfirmed)
-            {
-                var parkedSession = previousSession ?? new SessionState
-                {
-                    SessionId = sessionId,
-                    UserId = userContext.UserId,
-                    OriginalPrompt = prompt,
-                    PromptDomain = promptDomain
-                };
-                parkedSession.PendingPrompt = prompt;
-                parkedSession.DeliveryAddress = deliveryAddress;
-                parkedSession.AddressConfirmed = false;
-                parkedSession.PromptDomain = promptDomain;
-                parkedSession.Options = [];
-                _sessionStore.Save(parkedSession);
-
-                return new OrchestrationResponse
-                {
-                    SessionId = sessionId,
-                    Status = OrchestrationStatus.NeedsAddress,
-                    Message = $"Before I proceed, is this still your delivery address?\n\n  {deliveryAddress}\n\nReply \"yes\" to use it, or send a new address.",
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["reason"] = "confirm-saved-address",
-                        ["deliveryAddress"] = deliveryAddress,
-                        ["promptDomain"] = promptDomain
-                    }
-                };
+                previousSession.DeliveryAddress = deliveryAddress;
+                previousSession.AddressConfirmed = true;
+                previousSession.PromptDomain = promptDomain;
+                _sessionStore.Save(previousSession);
             }
         }
 
@@ -226,6 +187,24 @@ public sealed class WorkflowEngine : IWorkflowEngine
         // Continuity classification — is this a refinement of the last turn or a new intent?
         // ------------------------------------------------------------------------------------
         var continuation = ClassifyContinuation(prompt, promptDomain, previousSession);
+
+        // Solo-agent mode override: when the client sends preferredAgentId ("Chat with agent"
+        // in the sample UI), we route the prompt to that agent alone. If the agent already
+        // has options in this session we treat it as a refinement so its Foundry thread is
+        // reused; otherwise it's a new intent scoped to that agent.
+        if (!string.IsNullOrWhiteSpace(preferredAgentId))
+        {
+            var hasHistoryForAgent = previousSession is not null
+                && previousSession.Options.Any(o =>
+                    string.Equals(o.AgentId, preferredAgentId, StringComparison.Ordinal));
+            continuation = hasHistoryForAgent
+                ? ContinuationDecision.RefinePrevious
+                : ContinuationDecision.NewIntent;
+            _logger.LogInformation(
+                "Discover: preferredAgentId={AgentId} forced continuation={Continuation} (hasHistory={HasHistory})",
+                preferredAgentId, continuation, hasHistoryForAgent);
+        }
+
         _logger.LogInformation(
             "Discover: continuation decision for session {SessionId} = {Decision} (prevDomain={Prev}, newDomain={Cur}, prevOptions={Opt})",
             sessionId, continuation, previousSession?.PromptDomain ?? "-", promptDomain, previousSession?.Options.Count ?? 0);
@@ -240,6 +219,15 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 .GroupBy(o => o.AgentId, StringComparer.Ordinal)
                 .Select(g => new AgentInfo { AgentId = g.Key, Name = g.First().AgentName })
                 .ToList();
+
+            // Solo-agent mode: keep only the requested agent so brand extraction and
+            // fan-out below can't accidentally re-include the others.
+            if (!string.IsNullOrWhiteSpace(preferredAgentId))
+            {
+                selectedAgents = selectedAgents
+                    .Where(a => string.Equals(a.AgentId, preferredAgentId, StringComparison.Ordinal))
+                    .ToList();
+            }
 
             if (selectedAgents.Count == 0)
                 continuation = ContinuationDecision.NewIntent;
@@ -297,31 +285,80 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
             if (agents is null || agents.Count == 0)
             {
+                // FetchAvailableAgents already filters by the classified prompt domain, so an
+                // empty list here means we recognized what the user wanted (e.g. "laptop" →
+                // electronics) but no onboarded agent covers that domain. Return a clear
+                // message rather than silently falling back to unrelated agents.
+                var friendlyDomain = FormatDomainLabel(promptDomain);
+                var domainMsg = string.IsNullOrWhiteSpace(friendlyDomain) || friendlyDomain == "general"
+                    ? "No relevant agent is available for your request. Try onboarding an agent that covers this task."
+                    : $"No relevant agent is available for {friendlyDomain} requests. Try onboarding a {friendlyDomain} agent, or rephrase your request.";
+
                 return new OrchestrationResponse
                 {
                     SessionId = sessionId,
                     Status = OrchestrationStatus.Failed,
-                    Message = "No agents available for the requested task."
+                    Message = domainMsg,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["reason"] = "no-agent-for-domain",
+                        ["promptDomain"] = promptDomain
+                    }
                 };
             }
 
-            selectedAgents = await _skillExecutor.ExecuteAsync<List<AgentInfo>>(
-                SkillNames.SelectBestAgent,
-                new Dictionary<string, object>
+            // Solo-agent mode: skip SelectBestAgent and route to the requested agent only.
+            if (!string.IsNullOrWhiteSpace(preferredAgentId))
+            {
+                var pinned = agents
+                    .Where(a => string.Equals(a.AgentId, preferredAgentId, StringComparison.Ordinal))
+                    .ToList();
+                if (pinned.Count == 0)
                 {
-                    ["prompt"] = prompt,
-                    ["agents"] = agents,
-                    ["userContext"] = userContext
-                },
-                ct) ?? [];
+                    return new OrchestrationResponse
+                    {
+                        SessionId = sessionId,
+                        Status = OrchestrationStatus.Failed,
+                        Message = "The agent you're chatting with isn't available for that request.",
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["reason"] = "preferred-agent-unavailable",
+                            ["preferredAgentId"] = preferredAgentId
+                        }
+                    };
+                }
+                selectedAgents = pinned;
+            }
+            else
+            {
+                selectedAgents = await _skillExecutor.ExecuteAsync<List<AgentInfo>>(
+                    SkillNames.SelectBestAgent,
+                    new Dictionary<string, object>
+                    {
+                        ["prompt"] = prompt,
+                        ["agents"] = agents,
+                        ["userContext"] = userContext
+                    },
+                    ct) ?? [];
+            }
 
             if (selectedAgents.Count == 0)
             {
+                var friendlyDomain = FormatDomainLabel(promptDomain);
+                var domainMsg = string.IsNullOrWhiteSpace(friendlyDomain) || friendlyDomain == "general"
+                    ? "No relevant agent is available for your request."
+                    : $"No relevant agent is available for {friendlyDomain} requests. Try onboarding a {friendlyDomain} agent, or rephrase your request.";
+
                 return new OrchestrationResponse
                 {
                     SessionId = sessionId,
                     Status = OrchestrationStatus.Failed,
-                    Message = "Could not determine a suitable agent for your request."
+                    Message = domainMsg,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["reason"] = "no-agent-for-domain",
+                        ["promptDomain"] = promptDomain
+                    }
                 };
             }
 
@@ -345,20 +382,27 @@ public sealed class WorkflowEngine : IWorkflowEngine
         }
 
         // Decide the fan-out shape.
-        //   * Generic query (no explicit brand)         -> top 3 agents, top 3 options each = up to 9 total.
+        //   * Generic query (no explicit brand)         -> up to MaxAgentsForGenericFanout agents,
+        //                                                 up to MaxOptionsPerAgentGeneric options each.
         //   * Brand-specific / refinement continuation  -> top 3 options overall (legacy behavior).
         var isGenericQuery = preferredBrands.Count == 0;
-        var maxAgentsForFanout = isGenericQuery ? 3 : selectedAgents.Count;
-        var maxOptionsPerAgent = isGenericQuery ? 3 : 0; // 0 = no per-agent quota
+        var maxAgentsForFanout = isGenericQuery ? MaxAgentsForGenericFanout : selectedAgents.Count;
+        var maxOptionsPerAgent = isGenericQuery ? MaxOptionsPerAgentGeneric : 0; // 0 = no per-agent quota
         var maxTotalOptions = isGenericQuery ? maxAgentsForFanout * maxOptionsPerAgent : 3;
 
         if (selectedAgents.Count > maxAgentsForFanout)
         {
             _logger.LogInformation(
-                "Discover: generic-query fan-out capped at {Cap} agents (had {Total}).",
-                maxAgentsForFanout, selectedAgents.Count);
+                "Discover: generic-query fan-out capped at {Cap} agents (had {Total}). Dropped=[{Dropped}]",
+                maxAgentsForFanout, selectedAgents.Count,
+                string.Join(", ", selectedAgents.Skip(maxAgentsForFanout).Select(a => $"'{a.Name}'")));
             selectedAgents = selectedAgents.Take(maxAgentsForFanout).ToList();
         }
+
+        _logger.LogInformation(
+            "Discover: fanning out to {Count} agent(s): [{Names}]",
+            selectedAgents.Count,
+            string.Join(", ", selectedAgents.Select(a => $"'{a.Name}'(id={a.AgentId})")));
 
         // Step 2: enriched prompt with refinement + delivery address context.
         var contextDocs = await _userContextService.GetRelevantContextAsync(
@@ -413,6 +457,23 @@ public sealed class WorkflowEngine : IWorkflowEngine
 
         var rawResults = (await Task.WhenAll(invocationTasks)).ToList();
 
+        // Per-agent outcome dump so a missing option can be traced back to its invoke status.
+        // Without this, an agent that came back with status="requires_action" or an empty
+        // summary looks identical to one that was never invoked — both simply "don't show up".
+        foreach (var raw in rawResults)
+        {
+            var agentName = raw.TryGetValue("agentName", out var an) ? an?.ToString() : null;
+            var agentId = raw.TryGetValue("agentId", out var ai) ? ai?.ToString() : null;
+            var status = raw.TryGetValue("status", out var st) ? st?.ToString() : null;
+            var summary = raw.TryGetValue("summary", out var su) ? su?.ToString() ?? string.Empty : string.Empty;
+            var errCode = raw.TryGetValue("errorCode", out var ec) ? ec?.ToString() : null;
+            var errMsg = raw.TryGetValue("error", out var em) ? em?.ToString() : null;
+            _logger.LogInformation(
+                "Discover fan-out result: name='{Name}' id={Id} status={Status} summaryLen={Len} errorCode={ErrCode} error='{Err}'",
+                agentName, agentId, status, summary.Length,
+                errCode ?? "(none)", errMsg ?? "(none)");
+        }
+
         // Step 4: rank + normalize.
         var rankedOptions = await _skillExecutor.ExecuteAsync<List<AgentOption>>(
             SkillNames.RankOptions,
@@ -466,6 +527,25 @@ public sealed class WorkflowEngine : IWorkflowEngine
             metadata["addressConfirmed"] = addressAlreadyConfirmed;
         }
 
+        // When no options came back, look at the raw fan-out results to explain WHY. This turns
+        // a bare "no results" into an actionable message like "Both electronics agents replied
+        // but had no matches in stock", which is what the user will actually see for a laptop
+        // prompt that both Dell and Lenovo answered with an empty JSON array.
+        var failMessage = "No agent returned a usable result. Try refining your request.";
+        if (rankedOptions.Count == 0 && rawResults.Count > 0)
+        {
+            var okReplies = rawResults.Count(r =>
+                r.TryGetValue("status", out var st) && st?.ToString() == "completed");
+            var failReplies = rawResults.Count - okReplies;
+            var invokedAgents = string.Join(", ", rawResults
+                .Select(r => r.TryGetValue("agentName", out var an) ? an?.ToString() : null)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Select(n => $"'{n}'"));
+            failMessage = okReplies > 0
+                ? $"Contacted {rawResults.Count} agent(s) ({invokedAgents}) but none had a concrete offer for this request. Try refining with brand, budget, or specs."
+                : $"All {rawResults.Count} agent(s) ({invokedAgents}) failed to respond. Try again in a moment.";
+        }
+
         return new OrchestrationResponse
         {
             SessionId = sessionId,
@@ -474,7 +554,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
                 ? (continuation == ContinuationDecision.RefinePrevious
                     ? $"Updated — {rankedOptions.Count} option(s) based on your refinement."
                     : $"Found {rankedOptions.Count} option(s) for your request.")
-                : "No agent returned a usable result. Try refining your request.",
+                : failMessage,
             Options = rankedOptions,
             Metadata = metadata
         };
@@ -492,30 +572,8 @@ public sealed class WorkflowEngine : IWorkflowEngine
         var selected = session?.Options.FirstOrDefault(o =>
             string.Equals(o.OptionId, optionId, StringComparison.Ordinal));
 
-        // Delivery-address gate: block Execute for delivery domains until the address is confirmed.
-        if (session is not null
-            && RequiresDeliveryAddress(session.OriginalPrompt, session.PromptDomain)
-            && !session.AddressConfirmed)
-        {
-            var saved = await _userContextService.GetSavedAddressAsync(userContext.UserId, ct);
-            session.DeliveryAddress = saved;
-            session.PendingPrompt = session.OriginalPrompt;
-            _sessionStore.Save(session);
-
-            return new OrchestrationResponse
-            {
-                SessionId = sessionId,
-                Status = OrchestrationStatus.NeedsAddress,
-                Message = string.IsNullOrWhiteSpace(saved)
-                    ? "Before I place this order, please share a delivery address."
-                    : $"Before I place this order, is this still your delivery address?\n\n  {saved}\n\nReply \"yes\" to use it, or send a new address.",
-                Metadata = new Dictionary<string, object>
-                {
-                    ["reason"] = string.IsNullOrWhiteSpace(saved) ? "delivery-requires-address" : "confirm-saved-address",
-                    ["deliveryAddress"] = saved ?? string.Empty
-                }
-            };
-        }
+        // Delivery-address gate removed — the saved address is applied silently below
+        // via `effectiveAddress`, so the user is never prompted at Execute time.
 
         // Guardrail decision.
         var guardrail = EvaluateExecuteGuardrails(session);
@@ -762,6 +820,11 @@ public sealed class WorkflowEngine : IWorkflowEngine
             return ConversationalIntent.PreferencesQuery;
 
         // Session recall — only when there are prior options to recap.
+        // Guard: reject when the prompt itself names a NEW task domain distinct from the
+        // session's stored domain (e.g. previous session was food-delivery and the user
+        // now asks "what are laptop options available to me?"). Without this, the recall
+        // regex would greedily match "what … options" and silently reply with the old
+        // food cards instead of fanning out to laptop agents.
         if (session is { Options.Count: > 0 } &&
             (Regex.IsMatch(lower, @"\b(what|which)\b.{0,30}?\b(options?|choices?|pizzas?|hotels?|flights?|results?|cards?|offers?)\b")
              || lower.StartsWith("recap", StringComparison.Ordinal)
@@ -769,7 +832,17 @@ public sealed class WorkflowEngine : IWorkflowEngine
              || lower.StartsWith("summari", StringComparison.Ordinal)  // summarize / summarise
              || lower.StartsWith("show them again", StringComparison.Ordinal)
              || lower.StartsWith("what did you show", StringComparison.Ordinal)))
-            return ConversationalIntent.SessionRecall;
+        {
+            var promptDomain = ExtractDomain(lower);
+            var sessionDomain = session.PromptDomain ?? string.Empty;
+            var domainConflicts =
+                !string.IsNullOrEmpty(promptDomain)
+                && !string.Equals(promptDomain, "general", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(promptDomain, sessionDomain, StringComparison.OrdinalIgnoreCase);
+
+            if (!domainConflicts)
+                return ConversationalIntent.SessionRecall;
+        }
 
         // Help / capabilities.
         if (Regex.IsMatch(lower, @"^(help|who are you|what are you|what can you do)\b[!\.\?]*$")
@@ -1265,26 +1338,68 @@ public sealed class WorkflowEngine : IWorkflowEngine
             "3. Use today's date (" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ") to resolve " +
             "relative dates like \"next Friday\" or \"tomorrow\".\n" +
             "4. Return 2-3 concrete offers as a JSON array wrapped in ```json``` fences. Each " +
-            "item MUST include: title, description, price (number), currency. Include ONLY the " +
-            "attributes that materially help the user pick (departure, arrival, duration, stops, " +
-            "cabin, eta, delivery_eta, cuisine, rating, distance). Do not dump every field the " +
-            "provider returned.\n" +
-            "5. Keep 'description' to at most 25 words, prompt-specific, no marketing prose, no " +
-            "emojis. Do not restate info already in 'title' or in attributes.\n" +
-            "6. Do not add prose before or after the JSON array — the JSON block is the entire response.");
+            "item MUST include: title, description, price (number), currency.\n" +
+            "   • If the request is squarely in YOUR domain (e.g. you are a laptop brand agent " +
+            "and the user asks for a laptop), you MUST return 2-3 specific offers drawn from " +
+            "your own brand's realistic product catalog — even if you don't have a live " +
+            "inventory feed. Use plausible current-generation SKUs, models, and prices from " +
+            "your brand. Do NOT return an empty array just because you lack a database.\n" +
+            "   • Return an empty JSON array [] ONLY when the request is CLEARLY OUTSIDE your " +
+            "domain (e.g. a pizza brand asked for a laptop, an airline asked for hotels). Never " +
+            "invent items outside your domain to fit the prompt.\n" +
+            "5. 'title' MUST be a short, specific identifier of THIS offer — the concrete item / " +
+            "booking / reservation reference the user is choosing between. Examples: " +
+            "\"Margherita Pizza (12in)\", \"Legion Slim 5 · RTX 4060 · 16GB\", " +
+            "\"Flight AI102 · JFK→LHR\", \"Reservation #R-8821\". NEVER a generic label like " +
+            "\"Option 1\", \"Pizza\", \"Laptop\", or the provider name alone.\n" +
+            "6. 'description' MUST be 20–45 words explaining what the offer includes, why it fits " +
+            "the user's request, and any assumed defaults. Include the decision-worthy detail the " +
+            "user needs to pick between offers (specs, times, toppings, room type, etc.). No " +
+            "marketing prose, no emojis, no restating the title verbatim.\n" +
+            "7. Include ONLY the attributes that materially help the user pick (departure, arrival, " +
+            "duration, stops, cabin, eta, delivery_eta, cuisine, rating, distance). Do not dump " +
+            "every field the provider returned.\n" +
+            "8. Do not add prose before or after the JSON array — the JSON block is the entire response.");
 
         return string.Join("\n\n", contextParts);
     }
 
     // ---- Brand preference extraction ----
 
-    // Words that appear inside agent names but shouldn't be treated as brand tokens.
+    // Words that appear inside agent names but shouldn't be treated as brand tokens. A brand
+    // token has to actually identify a *provider* (Dell, Emirates, Dominos) — generic product
+    // categories (laptop, pizza, flight) and role words (agent, service) are not brands, and
+    // treating them as such causes silent fan-out narrowing. The user's real report was that
+    // "Find me a gaming laptop under $1,000" matched only 'Dell Laptop Agent' and dropped
+    // 'Lenovo-Accessories-Agent' because the prompt's word "laptop" appeared in Dell's name
+    // and not in Lenovo's — even though "laptop" is not a brand.
     private static readonly HashSet<string> BrandStopWords = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Role / infrastructure words
         "agent", "bot", "assistant", "helper", "service", "provider", "prod", "dev", "test",
         "the", "and", "for", "of", "on", "in", "app", "api", "v1", "v2", "v3",
+
+        // Travel / food generic nouns
         "flight", "flights", "hotel", "hotels", "food", "delivery", "dining", "pickup", "package",
-        "restaurant", "airline", "airlines"
+        "restaurant", "restaurants", "airline", "airlines", "airfare", "trip", "travel",
+        "booking", "reservation", "reservations", "stay", "meal", "meals",
+
+        // Food items (generic — brands are Dominos / PizzaHut / McDonalds, etc.)
+        "pizza", "pizzas", "burger", "burgers", "sushi", "biryani", "noodles", "pasta",
+        "sandwich", "cuisine", "dessert", "salad", "ramen", "curry", "taco", "tacos",
+        "sub", "wrap", "wings", "breakfast", "lunch", "dinner", "brunch", "coffee", "tea",
+
+        // Electronics / laptop generic nouns (this is the one that caused the reported bug)
+        "laptop", "laptops", "notebook", "notebooks", "computer", "computers", "desktop", "desktops",
+        "ultrabook", "chromebook", "tablet", "tablets", "smartphone", "phone", "phones",
+        "monitor", "monitors", "keyboard", "keyboards", "mouse", "mice", "headphone", "headphones",
+        "earbud", "earbuds", "speaker", "speakers", "camera", "cameras", "console", "consoles",
+        "accessory", "accessories", "electronics", "gaming", "gamer", "gadget", "gadgets",
+        "hardware", "peripheral", "peripherals",
+
+        // Generic spec / adjective tokens sometimes baked into agent names
+        "budget", "premium", "basic", "standard", "pro", "plus", "max", "mini", "lite",
+        "store", "shop", "market", "hub", "portal", "online"
     };
 
     /// <summary>
@@ -1382,6 +1497,30 @@ public sealed class WorkflowEngine : IWorkflowEngine
             || promptLower.Contains("courier") || promptLower.Contains("fedex") || promptLower.Contains("dhl")
             || promptLower.Contains("usps"))
             return "package-pickup";
+        if (promptLower.Contains("laptop") || promptLower.Contains("notebook") || promptLower.Contains("macbook")
+            || promptLower.Contains("computer") || promptLower.Contains("desktop")
+            || promptLower.Contains("smartphone") || promptLower.Contains("iphone")
+            || promptLower.Contains("headphone") || promptLower.Contains("headphones")
+            || promptLower.Contains("monitor") || promptLower.Contains("keyboard")
+            || promptLower.Contains("gaming") || promptLower.Contains("rtx") || promptLower.Contains("gpu")
+            || promptLower.Contains("playstation") || promptLower.Contains("xbox") || promptLower.Contains("nintendo"))
+            return "electronics";
         return "general";
     }
+
+    /// <summary>
+    /// Turn an internal domain slug ("food-delivery", "flights") into a human-readable label
+    /// used in user-facing "no relevant agent" messages.
+    /// </summary>
+    private static string FormatDomainLabel(string domain) => domain switch
+    {
+        "flights" => "flight",
+        "hotels" => "hotel",
+        "food-delivery" => "food-delivery",
+        "dining" => "restaurant",
+        "package-pickup" => "package-pickup",
+        "electronics" => "electronics",
+        "" or "general" => "general",
+        _ => domain
+    };
 }

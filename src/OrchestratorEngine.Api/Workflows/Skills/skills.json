@@ -2,12 +2,21 @@
   "skills": [
     {
       "name": "fetch_available_agents",
-      "description": "Connects to Azure AI Foundry and retrieves all available agents registered in the project. Filters agents based on their capabilities and active status.",
+      "description": "Connects to Azure AI Foundry and retrieves all available agents registered in the project, then STRICTLY scopes the returned set to the prompt's domain. Uses a weighted keyword classifier (primary nouns/brand names ×3, secondary verbs ×1) to place both the prompt and each agent into one of the known domains (flights, hotels, food-delivery, dining, electronics). Only agents whose classified domain matches the prompt's domain are returned. If the prompt cannot be classified, only agents that are themselves domain-neutral (no classified domain) are returned — never a mismatched-domain agent. This is what prevents a laptop agent (e.g. Lenovo) from responding to a food prompt with hallucinated generic options.",
       "input": {
-        "prompt": "The user prompt to help filter relevant agents by domain"
+        "prompt": "The user prompt used to determine the target domain"
       },
-      "output": "List of AgentInfo objects containing agent metadata, capabilities, and MCP server endpoints",
+      "output": "List of AgentInfo objects restricted to the prompt's domain (or the domain-neutral subset when the prompt has no classifiable domain). May be empty — the workflow will surface a clarification in that case.",
       "requiredServices": ["IFoundryAgentService"],
+      "domainContract": {
+        "matchRule": "prompt-domain == agent-domain (case-insensitive)",
+        "fallbackWhenPromptUnclassified": "keep only agents whose ClassifyAgent returns an empty domain",
+        "fallbackWhenAgentUnclassified": "drop the agent whenever the prompt IS classified",
+        "agentDomainSources": [
+          "configuration.tags[0] (preferred — set during onboarding)",
+          "name + description + capabilities keyword match"
+        ]
+      },
       "retryPolicy": {
         "maxRetries": 3,
         "backoffMs": 1000
@@ -15,31 +24,31 @@
     },
     {
       "name": "select_best_agent",
-      "description": "Analyzes the user prompt and available agents to select the most appropriate 1-2 agents. Computes a heuristic relevance score per agent (name/description keyword match, capability match, user preference match, and historical usage bonus from the vector store), then passes the top-ranked candidates and their scores to a Foundry LLM (AzureFoundry:SelectorAgentId) to make the final pick. Falls back to the heuristic ranking alone if no selector agent is configured or the call fails.",
+      "description": "Ranks the domain-scoped agent set from fetch_available_agents against the user prompt, user preferences, and vector-store history. Applies a cross-domain hard penalty so a wrong-domain agent that slipped through the filter cannot win on incidental token overlap. Optionally hands the top candidates to a Foundry LLM (AzureFoundry:SelectorAgentId) for the final pick. Falls back to the heuristic ranking alone if no selector agent is configured or the call fails. Never returns an agent from a domain different from the prompt's domain.",
       "input": {
         "prompt": "The user's natural language request",
-        "agents": "List of available agents from fetch_available_agents",
+        "agents": "Domain-scoped list from fetch_available_agents",
         "userContext": "User preferences, past interactions, and stored embeddings"
       },
-      "output": "Ranked list of best-matching AgentInfo objects (max 2)",
+      "output": "Ranked list of best-matching AgentInfo objects (max 5 for generic queries, capped further by workflow fan-out settings). Guaranteed same-domain as the prompt.",
       "requiredServices": ["IFoundryAgentService", "IUserContextService"],
       "selectionCriteria": [
-        "Agent capability match with prompt domain",
-        "User's historical preference for specific providers",
-        "Agent availability and response time",
-        "MCP server connectivity status",
+        "Same-domain requirement (hard constraint)",
+        "Weighted keyword overlap (name/description/capabilities)",
+        "User's historical preference for specific providers (vector-store bonus)",
+        "Explicit brand mention in the prompt (narrows to that brand's agent when present)",
         "Final LLM-assisted selection via AzureFoundry:SelectorAgentId, informed by heuristic scores"
       ]
     },
     {
       "name": "execute_agent_action",
-      "description": "Invokes the selected Foundry agent via its MCP server endpoint. Passes the enriched prompt (with user context and preferences) to the agent and retrieves structured results such as flight options, pricing, and availability.",
+      "description": "Invokes the selected Foundry agent via its MCP server endpoint. The agent MUST return concrete offers (JSON array under a ```json fence) with fields: title (the specific item / booking / itinerary identifier — e.g. \"Margherita Pizza (12in)\", \"Booking #AA1234\"), description (2-3 sentence detail of what the offer includes), price (number), currency. No hallucinated generic options — the agent must respond only about items/services it actually hosts. Clarification-only replies are dropped downstream by the ranker.",
       "input": {
         "prompt": "The enriched prompt with user context",
         "userContext": "User preferences and history",
         "sessionId": "Current orchestration session ID"
       },
-      "output": "Structured response from the agent containing options, pricing, and details",
+      "output": "Structured response from the agent containing an array of {title, description, price, currency, ...attributes} — one entry per real offer the agent hosts. Title is short and specific to the item / booking / reservation number. Description is the agent-provided detail — no invented content.",
       "requiredServices": ["IFoundryAgentService"],
       "retryPolicy": {
         "maxRetries": 2,

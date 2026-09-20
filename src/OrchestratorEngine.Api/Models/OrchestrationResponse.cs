@@ -54,6 +54,22 @@ public sealed class AgentOption
     [JsonPropertyName("agent_type")]
     public string AgentType { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Short, specific heading for THIS offer — the concrete item / booking / reservation
+    /// reference (e.g. "Margherita Pizza (12in)", "Booking #AA1234"). Populated from the
+    /// agent's structured response; the client should prefer this over parsing <see cref="Details"/>.
+    /// </summary>
+    [JsonPropertyName("title")]
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Full agent-provided description of what the offer includes and why it fits the request.
+    /// Preserved verbatim (with light normalization); the client should render this as the
+    /// primary detail line under <see cref="Title"/>.
+    /// </summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
     /// <summary>Flat human-readable description of this specific offer (title + description + attributes).</summary>
     [JsonPropertyName("details")]
     public string Details { get; set; } = string.Empty;
@@ -62,14 +78,15 @@ public sealed class AgentOption
     [JsonPropertyName("price")]
     public string? Price { get; set; }
 
+    /// <summary>Structured attributes the agent returned (seat, cabin, toppings, rating, …).</summary>
+    [JsonPropertyName("attributes")]
+    public Dictionary<string, string> Attributes { get; set; } = [];
+
     // ---- Internal state used by the ranker/session-store; NOT serialized to the wire ----
 
     [JsonIgnore] public string Summary { get; set; } = string.Empty;
-    [JsonIgnore] public string? Title { get; set; }
-    [JsonIgnore] public string? Description { get; set; }
     [JsonIgnore] public decimal? PriceValue { get; set; }
     [JsonIgnore] public string? Currency { get; set; }
-    [JsonIgnore] public Dictionary<string, string> Attributes { get; set; } = [];
 
     /// <summary>Raw agent invocation payload — kept for session-store threading and Execute continuation.</summary>
     [JsonIgnore] public Dictionary<string, object> Raw { get; set; } = [];

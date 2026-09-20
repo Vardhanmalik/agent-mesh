@@ -1,0 +1,182 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Segoe UI, Inter, Arial, sans-serif",
+    "fontSize": "15px",
+    "primaryColor": "#EDE7FF",
+    "primaryBorderColor": "#5B3FD9",
+    "primaryTextColor": "#1F1147",
+    "lineColor": "#4B3AA8",
+    "clusterBkg": "#FBFAFF",
+    "clusterBorder": "#B7A8F0"
+  }
+} }%%
+flowchart TB
+
+%% ============================================================
+%%  FLOW A · END-USER INTERACTION SURFACES
+%% ============================================================
+subgraph USERS["🟢  Flow A · End-User Interaction Surfaces"]
+  direction LR
+  U1["<b>Microsoft 365 Copilot</b><br/>declarative agent / plugin"]
+  U2["<b>Edge Copilot</b><br/>edge-copilot-sample-ui"]
+  U3["<b>Bing / Web Chat</b>"]
+  U4["<b>Copilot Sample UI</b><br/>copilot-sample-ui"]
+end
+
+%% ============================================================
+%%  FLOW B · AGENT ONBOARDING SURFACE
+%% ============================================================
+subgraph ONBOARD["🟠  Flow B · Agent Onboarding Surface"]
+  direction LR
+  DEV["<b>Agent Owner / Developer</b><br/>name · description · model<br/>tags · capabilities · MCP endpoints<br/>OAuth authority"]
+  AMP["<b>Agent Mesh Platform UI</b><br/>samples/agent-mesh-platform<br/>onboarding wizard + catalog"]
+end
+
+DEV ==> AMP
+
+%% ============================================================
+%%  ORCHESTRATOR ENGINE  (App Service / Container)
+%% ============================================================
+subgraph HOST["☁  Azure App Service  /  Container  ·  Docker  ·  .NET 10"]
+  direction TB
+
+  subgraph API["<b>OrchestratorEngine.Api</b>  (ASP.NET Core)"]
+    direction TB
+
+    subgraph EDGE["API Edge"]
+      direction LR
+      CTL_RUN["<b>Runtime endpoints</b><br/>POST /process · /discover<br/>/execute · /confirm · /healthz"]
+      CTL_ONB["<b>Onboarding endpoints</b><br/>POST /onboard<br/>GET  /agents"]
+    end
+
+    OSVC["<b>OrchestrationService</b><br/>intent dispatcher"]
+
+    subgraph CORE["Orchestration Core"]
+      direction TB
+      WF["<b>WorkflowEngine</b><br/>Discover → Execute → Confirm<br/>continuity + address slot"]
+      SK["<b>SkillExecutor</b><br/>static contracts from <i>skills.json</i>:<br/>fetch_available_agents · select_best_agent<br/>execute_agent_action · confirm_booking<br/>store_context_embedding"]
+      SS[("<b>SessionStore</b><br/>in-memory")]
+    end
+
+    subgraph IQ["<b>Microsoft IQ</b>  (personal context + RAG)"]
+      direction TB
+      QCA["<b>VectorContextAgent</b><br/><i>IQueryContextAgent</i> — IQ wrapper"]
+      UCTX["<b>UserContextService</b><br/>preferences · saved address"]
+      VS["<b>VectorStorageService</b><br/>Semantic Kernel embeddings"]
+    end
+
+    FA["<b>FoundryAgentService</b><br/>+ <i>FoundryAuthHandler</i><br/>list · <b>create</b> · thread · run · confirm"]
+  end
+end
+
+%% ============================================================
+%%  AZURE PLATFORM
+%% ============================================================
+subgraph AZURE["☁  Azure Platform"]
+  direction TB
+
+  ENTRA["<b>Microsoft Entra ID</b><br/>DefaultAzureCredential<br/>Managed Identity"]
+
+  subgraph FOUNDRY_BOX["<b>Azure AI Foundry Project</b>"]
+    direction TB
+    LIST["Agents Data Plane<br/>/assistants  <i>2025-05-15-preview</i><br/>/agents  <i>v1 GA</i>"]
+    THREADS["Threads + Runs<br/>OpenAI-compatible"]
+    SEL["<b>Selector Agent</b><br/>LLM-assisted final pick<br/><i>AzureFoundry:SelectorAgentId</i>"]
+    HOSTED["<b>Hosted / Onboarded Agents</b><br/>Air India · Emirates · Indigo<br/>Zomato · Lenovo · …<br/>model = gpt-4o-mini / gpt-5-mini"]
+    MCP["<b>Per-Agent MCP Endpoints</b><br/>Discovery · Execution · Confirmation<br/>OAuth authority per agent"]
+  end
+
+  OAI["<b>Azure OpenAI</b><br/>text-embedding-ada-002<br/>1536-dim vectors"]
+
+  SEARCH[("<b>Azure AI Search</b><br/>index: <i>user-context</i><br/>HNSW · vector + filter<br/>UserId · Domain · CreatedAt")]
+end
+
+%% ============================================================
+%%  FLOW A EDGES  (green – runtime)  — declared first
+%% ============================================================
+U1 ==> CTL_RUN
+U2 ==> CTL_RUN
+U3 ==> CTL_RUN
+U4 ==> CTL_RUN
+CTL_RUN ==> OSVC
+OSVC == "1 · pull IQ context" ==> QCA
+QCA --> VS
+OSVC == "2 · store prompt embedding" ==> VS
+OSVC == "3 · intent dispatch" ==> WF
+WF <--> SS
+WF ==> SK
+WF -- "prefs / saved address" --> UCTX
+UCTX --> VS
+SK -- "fetch_available_agents" --> FA
+SK -- "select_best_agent" --> FA
+SK -- "execute_agent_action" --> FA
+SK -- "confirm_booking" --> FA
+SK -- "store_context_embedding" --> VS
+FA == "list agents (paginated)" ==> LIST
+FA == "create thread · add message · run · poll" ==> THREADS
+THREADS --> HOSTED
+HOSTED == "invoke MCP tool (per phase)" ==> MCP
+VS == "GenerateAsync(prompt)" ==> OAI
+VS == "MergeOrUpload · VectorQuery" ==> SEARCH
+
+%% ============================================================
+%%  FLOW B EDGES  (orange – onboarding)  — declared next
+%% ============================================================
+AMP == "POST /api/orchestrator/onboard" ==> CTL_ONB
+AMP == "GET  /api/orchestrator/agents  (catalog)" ==> CTL_ONB
+CTL_ONB == "CreateAgentAsync(request)" ==> FA
+FA == "POST /assistants (model · MCP tool block · tags)" ==> LIST
+LIST == "register in project" ==> HOSTED
+HOSTED == "bind Discovery / Execution / Confirmation MCP URLs" ==> MCP
+
+%% ============================================================
+%%  IDENTITY / SUPPORTING (dashed) — declared last
+%% ============================================================
+FA -. "LLM ranking of top-K" .-> SEL
+FA -. "Bearer token" .-> ENTRA
+VS -. "Bearer token" .-> ENTRA
+SEARCH -. "RBAC" .-> ENTRA
+OAI -. "RBAC" .-> ENTRA
+FOUNDRY_BOX -. "RBAC (Azure AI User)" .-> ENTRA
+MCP -. "OAuth authority per agent" .-> ENTRA
+
+%% ============================================================
+%%  LEGEND
+%% ============================================================
+subgraph LEGEND["Legend"]
+  direction LR
+  L1["═══ 🟢 Flow A · End-user runtime  (dynamic)"]
+  L2["═══ 🟠 Flow B · Agent onboarding  (one-time / on-change)"]
+  L3["- - -  auth / control plane  (static config)"]
+  L4["<b>Static:</b> skills.json · appsettings.json · SelectorAgentId · API versions"]
+  L5["<b>Dynamic:</b> agent list · thread runs · MCP invocation · embeddings · vector search"]
+end
+
+%% ============================================================
+%%  STYLING – orchestration theme (indigo / violet / teal)
+%% ============================================================
+classDef clientA      fill:#DDF3E1,stroke:#1F9D55,stroke-width:1.5px,color:#0B3B1F;
+classDef clientB      fill:#FFE6CC,stroke:#D97706,stroke-width:1.5px,color:#5B2E00;
+classDef controller   fill:#EDE6FF,stroke:#5B3FD9,stroke-width:2px,color:#1F1147;
+classDef core         fill:#E8DEFF,stroke:#5B3FD9,stroke-width:1.5px,color:#1F1147;
+classDef iq           fill:#D5F5EF,stroke:#0F9488,stroke-width:2px,color:#0B3B36;
+classDef agents       fill:#FFE9D6,stroke:#D97706,stroke-width:1.5px,color:#5B2E00;
+classDef azure        fill:#E1F0FF,stroke:#0078D4,stroke-width:1.5px,color:#003A66;
+classDef identity     fill:#FEF3C7,stroke:#B45309,stroke-width:1.5px,color:#4A2A00;
+classDef data         fill:#FCE7F3,stroke:#BE185D,stroke-width:1.5px,color:#4A0B2A;
+classDef legend       fill:#FBFAFF,stroke:#B7A8F0,stroke-width:1px,color:#1F1147;
+
+class U1,U2,U3,U4 clientA;
+class AMP,DEV clientB;
+class CTL_RUN,CTL_ONB,OSVC controller;
+class WF,SK,SS core;
+class QCA,UCTX,VS iq;
+class FA agents;
+class LIST,THREADS,SEL,HOSTED,MCP,OAI azure;
+class SEARCH data;
+class ENTRA identity;
+class L1,L2,L3,L4,L5 legend;
+
+linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 stroke:#1F9D55,stroke-width:2.5px,color:#0B3B1F
+linkStyle 0,25,26,27,28,29,30 stroke:#D97706,stroke-width:2.5px,color:#5B2E00

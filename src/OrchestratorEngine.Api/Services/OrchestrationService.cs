@@ -48,7 +48,7 @@ public sealed class OrchestrationService : IOrchestrationService
         var response = request.Intent switch
         {
             OrchestrationIntent.Discover => await _workflowEngine.DiscoverAndRecommendAsync(
-                request.Prompt, userContext, sessionId, ct),
+                request.Prompt, userContext, sessionId, request.PreferredAgentId, ct),
 
             OrchestrationIntent.Execute => await _workflowEngine.ExecuteSelectionAsync(
                 request.Prompt, userContext, sessionId, request.OptionId, ct),

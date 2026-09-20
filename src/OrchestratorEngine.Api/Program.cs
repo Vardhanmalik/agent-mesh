@@ -30,17 +30,20 @@ kernelBuilder.AddAzureOpenAIEmbeddingGenerator(
 // ---------------------------------------------------------------------------
 // HTTP client for Azure AI Foundry
 // ---------------------------------------------------------------------------
+builder.Services.AddTransient<FoundryAuthHandler>();
 builder.Services.AddHttpClient<IFoundryAgentService, FoundryAgentService>((sp, client) =>
 {
     var foundryOptions = builder.Configuration
         .GetSection(FoundryOptions.SectionName).Get<FoundryOptions>() ?? new FoundryOptions();
     client.BaseAddress = new Uri(foundryOptions.Endpoint);
-});
+})
+.AddHttpMessageHandler(sp => new FoundryAuthHandler(new DefaultAzureCredential()));
 
 // ---------------------------------------------------------------------------
 // Application services
 // ---------------------------------------------------------------------------
 builder.Services.AddSingleton<IVectorStorageService, VectorStorageService>();
+builder.Services.AddSingleton<ISessionStore, SessionStore>();
 builder.Services.AddScoped<IUserContextService, UserContextService>();
 builder.Services.AddScoped<IQueryContextAgent, VectorContextAgent>();
 builder.Services.AddScoped<ISkillExecutor, SkillExecutor>();

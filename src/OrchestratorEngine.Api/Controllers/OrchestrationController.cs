@@ -132,6 +132,22 @@ public sealed class OrchestrationController : ControllerBase
     public IActionResult Health() => Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow });
 
     /// <summary>
+    /// List every agent the orchestrator can see across both Foundry data-plane surfaces
+    /// (OpenAI-Assistants and Foundry Agent Service v1). Each item carries a
+    /// <see cref="AgentInfo.Configuration"/> snapshot — model, tags, capabilities, MCP endpoints,
+    /// tools, metadata — so callers (e.g. the Agent Mesh Platform onboarding UI) can render a
+    /// full config view without making per-agent round-trips.
+    /// </summary>
+    [HttpGet("agents")]
+    [ProducesResponseType(typeof(IEnumerable<AgentInfo>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListAgents(CancellationToken ct)
+    {
+        var agents = await _foundryAgentService.ListAvailableAgentsAsync(ct);
+        _logger.LogInformation("ListAgents returning {Count} agents", agents.Count);
+        return Ok(agents);
+    }
+
+    /// <summary>
     /// Onboard a new specialist agent into the orchestrator. Provisions the agent in Azure AI
     /// Foundry (OpenAI-Assistants surface) using the supplied name, description, model, MCP
     /// server, tags, and authority — then makes it immediately routable by <c>/discover</c>
@@ -177,6 +193,9 @@ public sealed class OrchestrationController : ControllerBase
         var response = new OnboardAgentResponse
         {
             AgentId = created.AgentId,
+            FriendlyId = string.IsNullOrEmpty(created.FriendlyId)
+                ? AgentInfo.BuildFriendlyId(created.Name)
+                : created.FriendlyId,
             Name = created.Name,
             Description = created.Description,
             Model = request.Model,
@@ -184,6 +203,9 @@ public sealed class OrchestrationController : ControllerBase
             Tags = request.Tags,
             Capabilities = request.Capabilities,
             McpServerUrl = string.IsNullOrEmpty(created.McpServerEndpoint) ? null : created.McpServerEndpoint,
+            McpServerUrlDiscovery = string.IsNullOrWhiteSpace(request.McpServerUrlDiscovery) ? null : request.McpServerUrlDiscovery,
+            McpServerUrlExecution = string.IsNullOrWhiteSpace(request.McpServerUrlExecution) ? null : request.McpServerUrlExecution,
+            McpServerUrlConfirmation = string.IsNullOrWhiteSpace(request.McpServerUrlConfirmation) ? null : request.McpServerUrlConfirmation,
             CreatedAt = DateTimeOffset.UtcNow
         };
 

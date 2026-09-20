@@ -68,10 +68,24 @@
 
 * { box-sizing: border-box; }
 
+/* The browser's implicit `[hidden] { display: none }` has the lowest specificity
+   and gets clobbered by any explicit `display:` rule (e.g. `.welcome { display: grid; }`,
+   `.messages-inner { display: flex; }`). That silently kept `.welcome` visible even
+   after `welcomeEl.hidden = true` — producing the reported "two scrollbars" state
+   (welcome + messages both flex-sized, each with `overflow-y: auto`).
+   Force `[hidden]` to actually hide, regardless of downstream display overrides. */
+[hidden] { display: none !important; }
+
 html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    /* Kill the outer window scroll. The shell already sizes itself to the viewport
+       and the only surface that should scroll is `.messages`. Without this, a long
+       transcript pushed the body slightly beyond 100vh and the browser rendered a
+       second scrollbar next to the internal one — what the user reported as
+       “two scrolls, one for header and one for the search results”. */
+    overflow: hidden;
     font-family: var(--font-ui);
     color: var(--text-primary);
     background: var(--bg-app);
@@ -90,6 +104,9 @@ textarea, input { font-family: inherit; }
     display: grid;
     grid-template-columns: 260px 1fr;
     height: 100vh;
+    /* Defensive: any child that miscalculates and grows past 100vh gets clipped
+       here instead of leaking into a window-level scrollbar. */
+    overflow: hidden;
     position: relative;
 }
 
@@ -291,6 +308,10 @@ textarea, input { font-family: inherit; }
     display: flex;
     flex-direction: column;
     min-height: 0;
+    /* `.messages` is the only intended scroll surface inside `.main`. Clip anything
+       that overflows the column so a wide card / pre-wrap block can't introduce a
+       second, horizontal scrollbar on the shell itself. */
+    overflow: hidden;
     background: var(--bg-main);
     position: relative;
 }
@@ -435,8 +456,47 @@ textarea, input { font-family: inherit; }
 .messages {
     flex: 1 1 auto;
     overflow-y: auto;
+    /* Thin, non-intrusive scrollbar so the single remaining scroll surface reads as
+       a polished chat pane instead of a chunky OS-default bar. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
     padding: 20px 24px 0;
     min-height: 0;
+}
+.messages::-webkit-scrollbar { width: 10px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+.messages:hover::-webkit-scrollbar-thumb {
+    background: var(--border);
+    background-clip: padding-box;
+}
+.messages::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+    background-clip: padding-box;
+}
+
+/* Same treatment on the sidebar chat list so a long history doesn't render a
+   chunky secondary scrollbar next to the transcript. */
+.nav-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+.nav-list::-webkit-scrollbar { width: 8px; }
+.nav-list::-webkit-scrollbar-track { background: transparent; }
+.nav-list::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.sidebar:hover .nav-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    background-clip: padding-box;
 }
 
 .messages-inner {
@@ -477,8 +537,9 @@ textarea, input { font-family: inherit; }
 
 .assistant-response.analysis {
     max-width: none;
-    font-size: 17px;
+    font-size: 14px;
     line-height: 1.5;
+    color: var(--text-secondary);
 }
 
 /* Reply row for sub-chat (avatar + message) */
@@ -1172,6 +1233,24 @@ textarea, input { font-family: inherit; }
     color: var(--text-primary);
 }
 
+.edit-cta {
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--brand-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+    flex: 0 0 auto;
+}
+
+.edit-cta:hover {
+    border-color: var(--brand-primary);
+    background: var(--brand-soft);
+}
+
 .total-row {
     display: flex;
     align-items: center;
@@ -1503,6 +1582,85 @@ textarea, input { font-family: inherit; }
     padding: 10px 12px;
     border-radius: 8px;
     font-size: 13px;
+}
+
+/* ==========================================================================
+   "Chat with agent" pill + solo-mode banner
+   ========================================================================== */
+
+.chat-with-agent-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text-secondary);
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    flex: 0 0 auto;
+}
+
+.chat-with-agent-btn:hover {
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    background: var(--brand-soft);
+}
+
+.solo-banner {
+    max-width: var(--transcript-max, 780px);
+    margin: 18px auto 4px;
+    padding: 0 4px;
+}
+
+.solo-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.solo-divider-line {
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--border-subtle);
+}
+
+.solo-divider-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.solo-ask {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.solo-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.solo-chip {
+    padding: 8px 14px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.solo-chip:hover {
+    border-color: var(--brand-primary);
+    background: var(--brand-soft);
 }
 
 /* ==========================================================================

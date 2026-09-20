@@ -23,4 +23,14 @@ public sealed class FoundryOptions
     /// selection falls back to the heuristic ranking alone.
     /// </summary>
     public string SelectorAgentId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Model / deployment name assigned to agents created via <c>CreateAgentAsync</c> when the
+    /// onboarding request does not specify one. This MUST match an existing model deployment in
+    /// the Foundry project — otherwise Foundry runs against the resulting agent fail with
+    /// <c>last_error.code=invalid_engine_error</c> and message
+    /// <c>Failed to resolve model info for: &lt;name&gt;</c>. When empty, the service falls back
+    /// to <c>gpt-4o-mini</c> for backward compatibility.
+    /// </summary>
+    public string DefaultAgentModel { get; set; } = string.Empty;
 }

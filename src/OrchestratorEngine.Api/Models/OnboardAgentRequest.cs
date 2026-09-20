@@ -46,6 +46,28 @@ public sealed class OnboardAgentRequest
     public string? McpServerLabel { get; set; }
 
     /// <summary>
+    /// MCP server used during the discovery phase (browsing / searching for options). Optional.
+    /// When set, the orchestrator prefers this endpoint during <c>/discover</c> fan-out.
+    /// Falls back to <see cref="McpServerUrl"/> when not provided.
+    /// </summary>
+    [JsonPropertyName("mcpServerUrlDiscovery")]
+    public string? McpServerUrlDiscovery { get; set; }
+
+    /// <summary>
+    /// MCP server used during the execution phase (preparing/committing the selected option).
+    /// Optional; used by <c>/execute</c>. Falls back to <see cref="McpServerUrl"/>.
+    /// </summary>
+    [JsonPropertyName("mcpServerUrlExecution")]
+    public string? McpServerUrlExecution { get; set; }
+
+    /// <summary>
+    /// MCP server used during the confirmation phase (final commit / payment / booking).
+    /// Optional; used by <c>/confirm</c>. Falls back to <see cref="McpServerUrl"/>.
+    /// </summary>
+    [JsonPropertyName("mcpServerUrlConfirmation")]
+    public string? McpServerUrlConfirmation { get; set; }
+
+    /// <summary>
     /// OAuth/OIDC authority the MCP server trusts (e.g. an Entra tenant URL). Persisted in
     /// agent metadata; the MCP tool block also receives it when the Foundry API accepts it.
     /// </summary>
@@ -62,6 +84,14 @@ public sealed class OnboardAgentRequest
 public sealed class OnboardAgentResponse
 {
     public string AgentId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// User-facing agent identifier derived from <see cref="Name"/> (e.g. "Dominos" →
+    /// "dominos-agent"). Kept in step with <see cref="AgentInfo.FriendlyId"/> so onboarding
+    /// clients can show the same slug they'd see in the Agent Mesh store.
+    /// </summary>
+    public string FriendlyId { get; set; } = string.Empty;
+
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Model { get; set; } = string.Empty;
@@ -69,5 +99,8 @@ public sealed class OnboardAgentResponse
     public List<string> Tags { get; set; } = [];
     public List<string> Capabilities { get; set; } = [];
     public string? McpServerUrl { get; set; }
+    public string? McpServerUrlDiscovery { get; set; }
+    public string? McpServerUrlExecution { get; set; }
+    public string? McpServerUrlConfirmation { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

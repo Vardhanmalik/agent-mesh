@@ -15,6 +15,13 @@ public sealed class OrchestrationRequest
     /// </summary>
     public string? OptionId { get; set; }
 
+    /// <summary>
+    /// When set on a <c>Discover</c> call, the workflow scopes fan-out to just this agent
+    /// ("Chat with agent" solo mode in the sample UI). Thread continuity is preserved when
+    /// the agent already has a thread in the session.
+    /// </summary>
+    public string? PreferredAgentId { get; set; }
+
     public UserContext? Context { get; set; }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
