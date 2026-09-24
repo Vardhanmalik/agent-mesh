@@ -26,3 +26,6 @@ Thumbs.db
 appsettings.*.local.json
 *.pfx
 *.pem
+
+## Puppeteer cache
+docs/.puppeteer-cache/
