@@ -4,6 +4,9 @@ A C# backend orchestration service that integrates with **Microsoft 365 Copilot*
 
 ## Architecture
 
+<img width="1251" height="710" alt="hld" src="https://github.com/user-attachments/assets/53756457-91b1-47e6-8418-d00238a3e646" />
+
+
 ```
 User Prompt (M365 Copilot) ──► Orchestration API ──► Workflow Engine
                                                      │
